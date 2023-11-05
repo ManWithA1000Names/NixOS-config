@@ -1,4 +1,4 @@
-_: {
+{ config, ... }: {
   imports = [
     ./audio/default.nix
 
@@ -33,6 +33,20 @@ _: {
   # networking
   networking.hostName = "big-boss";
   networking.networkmanager.enable = true;
+
+  # nvidia
+  services.xserver.videoDrivers = [ "nvidia" ];
+  hardware.opengl = {
+    enable = true;
+    driSupport = true;
+    driSupport32Bit = true;
+  };
+  hardware.nvidia = {
+    open = false; # nvidia open source kernel module, for 20 series and up only.
+    nvidiaSettings = true;
+    modesetting.enable = true;
+    package = config.boot.kernelPackages.nvidiaPackages.stable;
+  };
 
   system.copySystemConfiguration = true;
   system.stateVersion = "23.05";
