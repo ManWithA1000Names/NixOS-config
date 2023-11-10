@@ -12,6 +12,8 @@
       mpv
       vlc
       fnm
+      peco
+      htop
       brave
       kitty
       zoxide
@@ -24,6 +26,7 @@
       alacritty
       hyprpaper
       hyprpicker
+      popcorntime
     ];
   };
 }
