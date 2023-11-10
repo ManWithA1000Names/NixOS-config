@@ -9,11 +9,8 @@
       fd
       jq
       bat
-      mpv
-      vlc
       fnm
       peco
-      htop
       brave
       kitty
       zoxide

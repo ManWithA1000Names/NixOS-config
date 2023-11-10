@@ -4,10 +4,15 @@
     gcc
     vim
     curl
+    htop
     wget
     gnumake
     python3
     xdg-utils
+
+    # video
+    mpv
+    vlc
 
     # wayland specific
     mako
