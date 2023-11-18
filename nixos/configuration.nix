@@ -31,8 +31,11 @@
   };
 
   # networking
-  networking.hostName = "big-boss";
-  networking.networkmanager.enable = true;
+  networking = {
+    hostName = "big-boss";
+    networkmanager.enable = true;
+    firewall.enable = false;
+  };
 
   # nvidia
   services.xserver.videoDrivers = [ "nvidia" ];
