@@ -17,6 +17,7 @@
     # wayland specific
     mako
     wl-clipboard
+    egl-wayland
 
     # themes
     volantes-cursors

@@ -1,4 +1,4 @@
-{ config, ... }: {
+{ config, pkgs, ... }: {
   imports = [
     ./audio/default.nix
 
@@ -41,8 +41,10 @@
   services.xserver.videoDrivers = [ "nvidia" ];
   hardware.opengl = {
     enable = true;
+    # Vulkan stuff
     driSupport = true;
-    driSupport32Bit = true;
+    # VA-API
+    extraPackages = with pkgs; [ nvidia-vaapi-driver ];
   };
   hardware.nvidia = {
     open = false; # nvidia open source kernel module, for 20 series and up only.
