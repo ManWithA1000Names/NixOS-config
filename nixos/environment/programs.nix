@@ -10,14 +10,16 @@
     python3
     xdg-utils
 
-    # video
-    mpv
-    vlc
-
     # wayland specific
     mako
     wl-clipboard
     egl-wayland
+    waybar
+
+    # notfication support
+    libnotify
+    # to be able to change sound
+    pulseaudio
 
     # themes
     volantes-cursors

@@ -9,7 +9,14 @@
       fd
       jq
       bat
+      feh
+      eza
+      mpv
+      vlc
       fnm
+      grim
+      slurp
+      aria
       peco
       brave
       kitty
@@ -22,6 +29,7 @@
       playerctl
       alacritty
       hyprpaper
+      grimblast
       hyprpicker
       popcorntime
     ];
