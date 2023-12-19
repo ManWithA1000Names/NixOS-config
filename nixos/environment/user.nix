@@ -18,7 +18,6 @@
       slurp
       aria
       peco
-      brave
       kitty
       zoxide
       pamixer
