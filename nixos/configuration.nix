@@ -43,6 +43,7 @@
     enable = true;
     # Vulkan stuff
     driSupport = true;
+    driSupport32Bit = true;
     # VA-API
     extraPackages = with pkgs; [ nvidia-vaapi-driver ];
   };
@@ -50,9 +51,15 @@
     open = false; # nvidia open source kernel module, for 20 series and up only.
     nvidiaSettings = true;
     modesetting.enable = true;
-    package = config.boot.kernelPackages.nvidiaPackages.stable;
+    package = config.boot.kernelPackages.nvidiaPackages.legacy;
+
+    prime = {
+      sync.enable = true;
+      intelBusId = "PCI:0:2:0";
+      nvidiaBusId = "PCI:1:0:0";
+    };
   };
 
   system.copySystemConfiguration = true;
-  system.stateVersion = "23.05";
+  system.stateVersion = "23.11";
 }
