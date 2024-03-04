@@ -1,6 +1,5 @@
 { config, pkgs, ... }: {
-  imports = [
-    ./audio/default.nix
+  imports = [ ./audio/default.nix
 
     ./boot/default.nix
 
@@ -51,7 +50,7 @@
     open = false; # nvidia open source kernel module, for 20 series and up only.
     nvidiaSettings = true;
     modesetting.enable = true;
-    package = config.boot.kernelPackages.nvidiaPackages.legacy;
+    package = config.boot.kernelPackages.nvidiaPackages.legacy_390;
 
     prime = {
       sync.enable = true;
