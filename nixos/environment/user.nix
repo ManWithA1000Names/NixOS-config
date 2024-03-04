@@ -15,9 +15,10 @@
       vlc
       fnm
       grim
-      slurp
+      wofi
       aria
       peco
+      slurp
       kitty
       zoxide
       pamixer
