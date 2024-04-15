@@ -17,6 +17,7 @@
       grim
       wofi
       aria
+      file
       peco
       slurp
       kitty
