@@ -1,6 +1,12 @@
 { pkgs, ... }: {
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
+  boot = {
+    loader = {
+      systemd-boot.enable = true;
+      efi.canTouchEfiVariables = true;
+    };
+    supportedFilesystems = [ "ntfs" ];
+  };
+
   systemd.watchdog.rebootTime = "0";
 
   i18n.defaultLocale = "en_US.UTF-8";
