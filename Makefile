@@ -1,6 +1,6 @@
-all: waybar hypr mako kitty
+all: waybar hypr mako kitty wofi
 
-.PHONY: help nixos switch hypr mako waybar kitty send-it
+.PHONY: help nixos switch hypr mako waybar kitty wofi
 
 help:
 	@echo "Welcome to 'my' nix-os configuration files"
@@ -47,3 +47,6 @@ waybar:
 kitty:
 	cp -r ./kitty/ ~/.config/
 	@echo "DONE: kitty"
+
+wofi:
+	cp -r ./wofi/ ~/.config/wofi/
