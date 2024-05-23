@@ -1,5 +1,6 @@
 { config, pkgs, ... }: {
-  imports = [ ./audio/default.nix
+  imports = [
+    ./audio/default.nix
 
     ./boot/default.nix
 
@@ -35,6 +36,7 @@
     hostName = "big-boss";
     networkmanager.enable = true;
     firewall.enable = false;
+    nameservers = [ "1.1.1.1" "1.0.0.1" "8.8.8.8" "8.8.4.4" ];
   };
 
   # nvidia
