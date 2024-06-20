@@ -27,12 +27,18 @@
 
   programs = {
     mtr.enable = true;
+
+    hyprlock.enable = true;
+
     gamemode.enable = true;
+
     gnupg.agent = {
       enable = true;
       enableSSHSupport = true;
     };
+
     fish.enable = true;
+
     git = {
       enable = true;
       lfs.enable = true;

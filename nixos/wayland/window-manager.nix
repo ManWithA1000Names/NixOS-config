@@ -2,8 +2,6 @@
   programs.hyprland = {
     enable = true;
     xwayland = { enable = true; };
-    hyprlock.enable = true;
-    hypridle.enable = true;
   };
 
   xdg.portal = {
