@@ -2,7 +2,8 @@
   programs.hyprland = {
     enable = true;
     xwayland = { enable = true; };
-    enableNvidiaPatches = true;
+    hyprlock.enable = true;
+    hypridle.enable = true;
   };
 
   xdg.portal = {

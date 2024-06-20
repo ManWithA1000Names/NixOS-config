@@ -23,8 +23,7 @@ nixos:
 	cp /etc/nixos/hardware-configuration.nix .
 	rm -rf /etc/nixos/*
 	cp -r ./nixos/* /etc/nixos/
-	cp hardware-configuration.nix /etc/nixos/
-	rm hardware-configuration.nix
+	mv hardware-configuration.nix /etc/nixos/
 
 switch: nixos
 	nixos-rebuild switch
