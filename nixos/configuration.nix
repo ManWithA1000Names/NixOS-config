@@ -21,7 +21,10 @@
 
   # Time zone
   time.timeZone = "Europe/Athens";
-  i18n.defaultLocale = "en_US.UTF-8";
+  i18n = {
+    defaultLocale = "en_US.UTF-8";
+    supportedLocales = [ "en_US.UTF-8" "el_GR.UTF-8" ];
+  };
 
   # nix specifics
   nixpkgs.config.allowUnfree = true;
