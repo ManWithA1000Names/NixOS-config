@@ -42,10 +42,8 @@
 
   # nvidia
   services.xserver.videoDrivers = [ "nvidia" ];
-  hardware.opengl = {
+  hardware.graphics = {
     enable = true;
-    # Vulkan stuff
-    driSupport = true;
     # VA-API
     extraPackages = with pkgs; [ nvidia-vaapi-driver ];
   };
