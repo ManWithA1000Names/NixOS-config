@@ -52,7 +52,8 @@
           p = "push";
           s = "status";
           ch = "checkout";
-          a = "!git add $(git root)";
+          aa = "!git add $(git root)";
+          a = "add";
           c = "commit -m";
         };
         pull = { rebase = false; };
