@@ -54,7 +54,6 @@
           ch = "checkout";
           a = "!git add $(git root)";
           c = "commit -m";
-          ac = "!git a && git c";
         };
         pull = { rebase = false; };
       };
