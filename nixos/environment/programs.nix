@@ -26,12 +26,6 @@
   ];
 
   programs = {
-    mtr.enable = true;
-    steam = {
-      enable = true;
-      gamescopeSession.enable = true;
-    };
-    gamemode.enable = true;
     gnupg.agent = {
       enable = true;
       enableSSHSupport = true;

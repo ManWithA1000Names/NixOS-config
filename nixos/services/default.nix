@@ -1,11 +1,9 @@
 { pkgs, ... }: {
   services = {
-    printing.enable = true;
     resolved.enable = true;
-    gvfs.enable = true;
     avahi = {
       enable = true;
-      nssmdns = true;
+      nssmdns4 = true;
     };
     openssh = {
       enable = true;
