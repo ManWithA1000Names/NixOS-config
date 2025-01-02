@@ -1,0 +1,4 @@
+theme = Batman
+window-decoration = false
+background-opacity = 0.95
+mouse-hide-while-typing = true

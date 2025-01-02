@@ -1,6 +1,6 @@
-all: waybar hypr mako kitty wofi
+all: waybar hypr mako kitty wofi ghostty
 
-.PHONY: help nixos switch hypr mako waybar kitty wofi
+.PHONY: help nixos switch hypr mako waybar kitty wofi ghostty
 
 help:
 	@echo "Welcome to 'my' nix-os configuration files"
@@ -12,6 +12,8 @@ help:
 	@echo "mako      Deploy the mako configuration files."
 	@echo "waybar    Deploy the waybar configuration files."
 	@echo "kitty     Deploy the kitty configuration files."
+	@echo "wofi      Deploy the wofi configuration files."
+	@echo "ghostty   Deploy the ghostty configuration files."
 	@echo ""
 	@echo "Some special sub-commands"
 	@echo "nixos     Deploy the nixos configuration files. REQUIRES SUDO!"
@@ -49,3 +51,8 @@ kitty:
 
 wofi:
 	cp -r ./wofi/ ~/.config/wofi/
+	@echo "DONE: wofi"
+
+ghostty:
+	cp -r ./ghostty/ ~/.config/
+	@echo "DONE: ghostty"
