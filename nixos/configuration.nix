@@ -35,10 +35,15 @@
     firewall.enable = false;
     interfaces.enp4s0 = {
       ipv4.addresses = [{
-        address = "192.169.1.12";
+        address = "192.168.1.12";
         prefixLength = 24;
       }];
     };
+    defaultGateway = {
+      address = "192.168.1.1";
+      interface = "enp4s0";
+    };
+    nameservers = [ "1.1.1.1" "1.0.0.1" ];
   };
 
   # nvidia
