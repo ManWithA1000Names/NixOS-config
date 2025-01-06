@@ -39,11 +39,13 @@
         prefixLength = 24;
       }];
     };
+
     defaultGateway = {
       address = "192.168.1.1";
       interface = "enp4s0";
     };
     nameservers = [ "1.1.1.1" "1.0.0.1" ];
+
   };
 
   # nvidia
