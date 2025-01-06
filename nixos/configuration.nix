@@ -39,6 +39,11 @@
         prefixLength = 24;
       }];
     };
+
+    networking.defaultGateway = {
+      address = "192.168.1.1";
+      interface = "enp4s0";
+    };
   };
 
   # nvidia
