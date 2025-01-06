@@ -8,24 +8,12 @@
     packages = with pkgs; [
       fd
       bat
-      feh
       eza
-      mpv
-      grim
-      wofi
       aria
       file
       peco
-      slurp
-      kitty
-      pamixer
       ripgrep
-      firefox
       starship
-      playerctl
-      hyprpaper
-      grimblast
-      hyprpicker
     ];
   };
 }

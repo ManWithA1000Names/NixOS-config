@@ -12,10 +12,6 @@
 
     ./virtualisation/default.nix
 
-    ./wayland/customization.nix
-    ./wayland/login-manager.nix
-    ./wayland/window-manager.nix
-
     ./hardware-configuration.nix
   ];
 
@@ -33,19 +29,21 @@
 
   # networking
   networking = {
-    hostName = "big-boss";
-    networkmanager.enable = true;
+    hostName = "atalanta";
+
+    useDHCP = false;
     firewall.enable = false;
-    nameservers = [ "1.1.1.1" "1.0.0.1" "8.8.8.8" "8.8.4.4" ];
+    interfaces.enp4s0 = {
+      ipv4.addresses = [{
+        address = "192.169.1.12";
+        prefixLength = 24;
+      }];
+    };
   };
 
   # nvidia
   services.xserver.videoDrivers = [ "nvidia" ];
-  hardware.graphics = {
-    enable = true;
-    # VA-API
-    extraPackages = with pkgs; [ nvidia-vaapi-driver ];
-  };
+  hardware.graphics = { enable = true; };
   hardware.nvidia = {
     open = false; # nvidia open source kernel module, for 20 series and up only.
     nvidiaSettings = true;

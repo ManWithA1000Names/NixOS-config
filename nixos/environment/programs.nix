@@ -9,20 +9,6 @@
     gnumake
     python3
     xdg-utils
-
-    # wayland specific
-    mako
-    wl-clipboard
-    egl-wayland
-    waybar
-
-    # notfication support
-    libnotify
-    # to be able to change sound
-    pulseaudio
-
-    # themes
-    volantes-cursors
   ];
 
   programs = {
@@ -30,7 +16,9 @@
       enable = true;
       enableSSHSupport = true;
     };
+
     fish.enable = true;
+
     git = {
       enable = true;
       lfs.enable = true;
