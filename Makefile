@@ -21,3 +21,9 @@ nixos:
 switch: nixos
 	nixos-rebuild switch
 	@echo "DONE: switch"
+
+fast: nixos
+	nixos-rebuild switch --fast
+
+rollback:
+	nixos-rebuild switch --rollback

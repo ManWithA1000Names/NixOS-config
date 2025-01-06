@@ -1,0 +1,1 @@
+- [ ] Rewrite rules in adguard not getting registered on creation

@@ -8,6 +8,7 @@
     ./environment/user.nix
     ./environment/programs.nix
 
+    ./services/nfs.nix
     ./services/default.nix
 
     ./virtualisation/default.nix
