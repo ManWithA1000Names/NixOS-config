@@ -2,8 +2,6 @@ _: {
   services = {
     printing.enable = true;
 
-    resolved.enable = true;
-
     hypridle.enable = true;
 
     avahi = {
