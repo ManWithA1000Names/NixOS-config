@@ -42,6 +42,7 @@ in {
         ${subdomain "mealie"}.locations."/".proxyPass = localurl MEALIE_PORT;
         ${subdomain "adguard"}.locations."/".proxyPass = localurl ADGUARD_PORT;
         ${subdomain "git"}.locations."/".proxyPass = localurl GIT_PORT;
+        ${subdomain "netdata"}.locations."/".proxyPass = localurl 19999;
 
         ${subdomain "grafana"}.locations."/" = {
           proxyPass = localurl GRAFANA_PORT;
@@ -108,6 +109,10 @@ in {
       settings = {
         BASE_URL = "http://${subdomain "mealie"}";
       };
+    };
+
+    netdata = {
+      enable = true;
     };
 
   };
