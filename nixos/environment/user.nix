@@ -1,5 +1,8 @@
-{ pkgs, ... }: {
-  users.users.user = {
+{ pkgs, ... }:
+let username = "user";
+in {
+  nix.settings.trusted-users = [ username "@wheel" ];
+  users.users.${username} = {
     isNormalUser = true;
     description = "The human user";
     extraGroups =
