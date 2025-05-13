@@ -27,7 +27,10 @@
   };
 
   # nix specifics
-  nixpkgs.config.allowUnfree = true;
+  nixpkgs.config = {
+    allowUnfree = true;
+    cudaSupport = true;
+  };
   nix.settings = {
     experimental-features = "nix-command flakes";
     auto-optimise-store = true;
