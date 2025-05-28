@@ -1,0 +1,5 @@
+[general]
+import = ["./tokio-night-storm.toml"]
+
+[window]
+opacity = 0.95
