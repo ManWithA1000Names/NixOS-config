@@ -100,7 +100,7 @@ in {
 
     adguardhome = {
       enable = true;
-      port = services.adguard.port;
+      inherit (services.adguard) port;
       mutableSettings = false;
       settings = {
         dns.bootstrap_dns = [ "1.1.1.1" "1.0.0.1" ];
@@ -149,7 +149,7 @@ in {
 
     mealie = {
       enable = true;
-      port = services.mealie.port;
+      inherit (services.mealie) port;
       settings = { BASE_URL = "http://${""}"; };
     };
 
