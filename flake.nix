@@ -6,7 +6,7 @@
     homelab-dashboard.url = "github:manwitha1000names/dashboard";
   };
 
-  outputs = { nixpkgs, homelab-dashboard }:
+  outputs = { nixpkgs, homelab-dashboard, ... }:
     let
       system = "x86_64-linux";
       shared = import ./shared.nix;
