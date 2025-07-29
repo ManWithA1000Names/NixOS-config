@@ -7,12 +7,17 @@
   };
 
   outputs = { nixpkgs, homelab-dashboard, ... }:
-    let
-      system = "x86_64-linux";
-      shared = import ./shared.nix;
+    let system = "x86_64-linux";
     in {
       nixosConfigurations.local-cloud = nixpkgs.lib.nixosSystem {
         inherit system;
+
+        specialArgs = rec {
+          static_ip = "192.168.1.12";
+          base_domain_name = "local.cloud";
+          plane_app_port = 7000;
+          plane_app_domain = "plane.${base_domain_name}";
+        };
 
         modules = [
           homelab-dashboard.nixosModules.default
@@ -27,7 +32,7 @@
           ./hardware-configuration.nix
 
           # System configuration module
-          (_: {
+          ({ static_ip, ... }: {
             # Time zone
             time.timeZone = "Europe/Athens";
             i18n.defaultLocale = "en_US.UTF-8";
@@ -48,7 +53,7 @@
               firewall.enable = false;
               interfaces.enp4s0 = {
                 ipv4.addresses = [{
-                  address = shared.static_ip;
+                  address = static_ip;
                   prefixLength = 24;
                 }];
               };

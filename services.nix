@@ -1,8 +1,7 @@
-_:
+{ static_ip, plane_app_port, plane_app_domain, base_domain_name, ... }:
 let
-  shared = import ./shared.nix;
 
-  subdomain = subdomain: subdomain + "." + shared.base_domain_name;
+  subdomain = subdomain: subdomain + "." + base_domain_name;
   localurl = port: "http://127.0.0.1:${builtins.toString port}";
   localurlV6 = port: "http://[::1]:${builtins.toString port}";
 
@@ -44,8 +43,8 @@ let
       local_url = localurlV6 port;
     };
     plane = rec {
-      port = shared.plane_app_port;
-      domain = shared.plane_app_domain;
+      port = plane_app_port;
+      domain = plane_app_domain;
       url = "http://${domain}";
       local_url = localurl port;
     };
@@ -82,7 +81,7 @@ in {
       enable = true;
 
       virtualHosts = {
-        ${shared.base_domain_name} = {
+        ${base_domain_name} = {
           default = true;
           locations."/".proxyPass = localurl HOMELAB_DASHBOARD_PORT;
         };
@@ -106,11 +105,11 @@ in {
         dns.bootstrap_dns = [ "1.1.1.1" "1.0.0.1" ];
         filtering.rewrites = [
           {
-            answer = shared.static_ip;
-            domain = shared.base_domain_name;
+            answer = static_ip;
+            domain = base_domain_name;
           }
           {
-            answer = shared.static_ip;
+            answer = static_ip;
             domain = subdomain "*";
           }
         ];
