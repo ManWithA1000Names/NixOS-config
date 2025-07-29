@@ -3,56 +3,32 @@ let
 
   subdomain = subdomain: subdomain + "." + base_domain_name;
   localurl = port: "http://127.0.0.1:${builtins.toString port}";
-  localurlV6 = port: "http://[::1]:${builtins.toString port}";
 
   services = {
     adguard = rec {
       port = 8001;
       domain = subdomain "adguard";
       url = "http://${domain}";
-      local_url = localurl port;
     };
     gitea = rec {
       port = 8002;
       domain = subdomain "git";
       url = "http://${domain}";
-      local_url = localurl port;
-    };
-    grafana = rec {
-      port = 8003;
-      domain = subdomain "grafana";
-      url = "http://${domain}";
-      local_url = localurl port;
     };
     mealie = rec {
       port = 8004;
       domain = subdomain "mealie";
       url = "http://${domain}";
-      local_url = localurl port;
     };
     jellyfin = rec {
       port = 8096;
       domain = subdomain "fin";
       url = "http://${domain}";
-      local_url = localurl port;
-    };
-    warden = rec {
-      port = 8222;
-      domain = subdomain "warden";
-      url = "http://${domain}";
-      local_url = localurlV6 port;
     };
     plane = rec {
       port = plane_app_port;
       domain = plane_app_domain;
       url = "http://${domain}";
-      local_url = localurl port;
-    };
-    netdata = rec {
-      port = 19999;
-      domain = subdomain "netdata";
-      url = "http://${domain}";
-      local_url = localurl port;
     };
   };
 
@@ -60,7 +36,7 @@ let
     builtins.foldl' (acc: name:
       acc // {
         ${s.${name}.domain} = {
-          locations."/".proxyPass = s.${name}.local_url;
+          locations."/".proxyPass = localurl s.${name}.port;
         };
       }) { } (builtins.attrNames s);
 
@@ -127,20 +103,6 @@ in {
       database.port = GITEA_DB_PORT;
     };
 
-    grafana = {
-      enable = true;
-      settings = {
-        server = {
-          http_port = services.grafana.port;
-          domain = subdomain "grafana";
-        };
-        security = {
-          admin_user = "admin";
-          admin_password = "admin"; # Change this in production
-        };
-      };
-    };
-
     jellyfin = {
       enable = true;
       dataDir = "/mnt/hdd/jellyfin/";
@@ -152,9 +114,6 @@ in {
       settings = { BASE_URL = "http://${""}"; };
     };
 
-    netdata = { enable = true; };
-
-    vaultwarden = { enable = true; };
   };
 
 }
