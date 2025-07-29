@@ -1,6 +1,6 @@
 _:
 let
-  shared = import ../shared.nix;
+  shared = import ./shared.nix;
 
   subdomain = subdomain: subdomain + "." + shared.base_domain_name;
   localurl = port: "http://127.0.0.1:${builtins.toString port}";

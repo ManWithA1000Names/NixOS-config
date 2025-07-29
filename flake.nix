@@ -17,19 +17,13 @@
         modules = [
           homelab-dashboard.nixosModules.default
 
-          ./audio/default.nix
-
-          ./boot/default.nix
-
-          ./environment/default.nix
-          ./environment/user.nix
-          ./environment/programs.nix
-
-          ./services/nfs.nix
-          ./services/default.nix
-
-          ./virtualisation/default.nix
-
+          ./boot.nix
+          ./user.nix
+          ./audio.nix
+          ./services.nix
+          ./programs.nix
+          ./environment.nix
+          ./virtualisation.nix
           ./hardware-configuration.nix
 
           # System configuration module
@@ -66,7 +60,6 @@
               nameservers = [ "1.1.1.1" "1.0.0.1" ];
             };
 
-            system.copySystemConfiguration = true;
             system.stateVersion = "23.11";
           })
         ];
