@@ -63,7 +63,7 @@ let
         ${s.${name}.domain} = {
           locations."/".proxyPass = s.${name}.local_url;
         };
-      }) { } (builtins.attrsNames s);
+      }) { } (builtins.attrNames s);
 
   GITEA_DB_PORT = 9001;
   HOMELAB_DASHBOARD_PORT = 8000;
