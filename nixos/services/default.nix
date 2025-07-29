@@ -1,8 +1,9 @@
 { pkgs, ... }:
 let
-  URL = "atalanta.me";
+  URL = "loc.al";
   subdomain = subdomain: subdomain + "." + URL;
   localurl = port: "http://127.0.0.1:${builtins.toString port}";
+  localurlV6 = port: "http://[::1]:${builtins.toString port}";
 
   SERVER_IP = "192.168.1.12";
 
@@ -43,6 +44,8 @@ in {
         ${subdomain "adguard"}.locations."/".proxyPass = localurl ADGUARD_PORT;
         ${subdomain "git"}.locations."/".proxyPass = localurl GIT_PORT;
         ${subdomain "netdata"}.locations."/".proxyPass = localurl 19999;
+        ${subdomain "plane"}.locations."/".proxyPass = localurl 7000;
+        ${subdomain "warden"}.locations."/".proxyPass = localurlV6 8222;
 
         ${subdomain "grafana"}.locations."/" = {
           proxyPass = localurl GRAFANA_PORT;
@@ -60,7 +63,7 @@ in {
       mutableSettings = false;
       settings = {
         dns.bootstrap_dns = [ "1.1.1.1" "1.0.0.1" ];
-        dns.filtering.rewrites = [
+        filtering.rewrites = [
           {
             answer = SERVER_IP;
             domain = URL;
@@ -106,14 +109,12 @@ in {
     mealie = {
       enable = true;
       port = MEALIE_PORT;
-      settings = {
-        BASE_URL = "http://${subdomain "mealie"}";
-      };
+      settings = { BASE_URL = "http://${subdomain "mealie"}"; };
     };
 
-    netdata = {
-      enable = true;
-    };
+    netdata = { enable = true; };
+
+    vaultwarden = { enable = true; };
 
   };
 
