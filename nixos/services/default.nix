@@ -1,6 +1,6 @@
 { pkgs, ... }:
 let
-  URL = "loc.al";
+  URL = "local.cloud";
   subdomain = subdomain: subdomain + "." + URL;
   localurl = port: "http://127.0.0.1:${builtins.toString port}";
   localurlV6 = port: "http://[::1]:${builtins.toString port}";
