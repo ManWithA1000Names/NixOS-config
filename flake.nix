@@ -62,7 +62,7 @@
                 address = "192.168.1.1";
                 interface = "enp4s0";
               };
-              nameservers = [ "1.1.1.1" "1.0.0.1" ];
+              # nameservers = [ "1.1.1.1" "1.0.0.1" ];
             };
 
             system.stateVersion = "23.11";
