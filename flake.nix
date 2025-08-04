@@ -1,15 +1,20 @@
 {
   description = "NixOS configuration with flakes";
 
-  inputs = { nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05"; };
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixos-wsl.url = "github:nix-community/NixOS-WSL/main";
+  };
 
-  outputs = { nixpkgs, ... }:
+  outputs = { nixpkgs, nixos-wsl, ... }:
     let system = "x86_64-linux";
     in {
       nixosConfigurations.wsl = nixpkgs.lib.nixosSystem {
         inherit system;
 
         modules = [
+          nixos-wsl.nixosModules.default
+
           ./user.nix
           ./audio.nix
           ./programs.nix
@@ -17,6 +22,8 @@
 
           # System configuration module
           (_: {
+            wsl.enable = true;
+
             # Time zone
             time.timeZone = "Europe/Athens";
             i18n.defaultLocale = "en_US.UTF-8";
