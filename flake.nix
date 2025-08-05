@@ -4,16 +4,27 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     nixos-wsl.url = "github:nix-community/NixOS-WSL/main";
+    home-manager = {
+      url = "github:nix-community/home-manager/release-25.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    fish-config-source = {
+      flake = false;
+      url = "github:manwitha1000names/fish";
+    };
   };
 
-  outputs = { nixpkgs, nixos-wsl, ... }:
+  outputs = { nixpkgs, nixos-wsl, fish-config-source, home-manager, ... }:
     let system = "x86_64-linux";
     in {
       nixosConfigurations.wsl = nixpkgs.lib.nixosSystem {
         inherit system;
 
+        specialArgs = { username = "user"; };
+
         modules = [
           nixos-wsl.nixosModules.default
+          home-manager.nixosModules.default
 
           ./user.nix
           ./audio.nix
@@ -21,8 +32,9 @@
           ./environment.nix
 
           # System configuration module
-          (_: {
+          ({ username, ... }: {
             wsl.enable = true;
+            wsl.defaultUser = username;
 
             # Time zone
             time.timeZone = "Europe/Athens";
@@ -35,8 +47,17 @@
               auto-optimise-store = true;
             };
 
+            home-manager = {
+              extraSpecialArgs = {
+                inherit username;
+                fishConfigSource = fish-config-source;
+              };
+              users.${username} = import ./home.nix;
+            };
+
             system.stateVersion = "23.11";
           })
+
         ];
       };
 

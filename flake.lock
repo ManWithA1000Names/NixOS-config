@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "fish-config-source": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1752336154,
+        "narHash": "sha256-8P72iGmq5tGQK9XsFSuJKrKvJ2g68XyUchl4VJmdm9o=",
+        "owner": "manwitha1000names",
+        "repo": "fish",
+        "rev": "f41c96d8d6f81d57210875704bcad2fc312cc32b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "manwitha1000names",
+        "repo": "fish",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -13,6 +29,27 @@
       "original": {
         "owner": "edolstra",
         "repo": "flake-compat",
+        "type": "github"
+      }
+    },
+    "home-manager": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1753592768,
+        "narHash": "sha256-oV695RvbAE4+R9pcsT9shmp6zE/+IZe6evHWX63f2Qg=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "fc3add429f21450359369af74c2375cb34a2d204",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "ref": "release-25.05",
+        "repo": "home-manager",
         "type": "github"
       }
     },
@@ -70,6 +107,8 @@
     },
     "root": {
       "inputs": {
+        "fish-config-source": "fish-config-source",
+        "home-manager": "home-manager",
         "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs_2"
       }
