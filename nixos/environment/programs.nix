@@ -28,6 +28,8 @@
   programs = {
     mtr.enable = true;
 
+    nix-ld.enable = true;
+
     hyprlock.enable = true;
 
     gamemode.enable = true;

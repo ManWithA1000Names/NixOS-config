@@ -6,10 +6,9 @@ _: {
 
     gnome.gnome-keyring.enable = true;
 
-    avahi = {
-      enable = true;
-      nssmdns4 = true;
-    };
+    blueman.enable = true;
+
+    resolved.enable = true;
 
     openssh = {
       enable = true;

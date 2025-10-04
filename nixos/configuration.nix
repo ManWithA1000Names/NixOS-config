@@ -45,16 +45,22 @@
 
   # nvidia
   services.xserver.videoDrivers = [ "nvidia" ];
-  hardware.graphics = {
-    enable = true;
-    # VA-API
-    extraPackages = with pkgs; [ nvidia-vaapi-driver ];
-  };
-  hardware.nvidia = {
-    open = false; # nvidia open source kernel module, for 20 series and up only.
-    nvidiaSettings = true;
-    modesetting.enable = true;
-    package = config.boot.kernelPackages.nvidiaPackages.stable;
+  hardware = {
+    graphics = {
+      enable = true;
+      # VA-API
+      extraPackages = with pkgs; [ nvidia-vaapi-driver ];
+    };
+
+    nvidia = {
+      open =
+        false; # nvidia open source kernel module, for 20 series and up only.
+      nvidiaSettings = true;
+      modesetting.enable = true;
+      package = config.boot.kernelPackages.nvidiaPackages.stable;
+    };
+
+    bluetooth.enable = true;
   };
 
   system.copySystemConfiguration = true;
