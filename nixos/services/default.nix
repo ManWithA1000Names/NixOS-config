@@ -8,7 +8,7 @@ _: {
 
     blueman.enable = true;
 
-    resolved.enable = true;
+    # resolved.enable = true;
 
     openssh = {
       enable = true;
