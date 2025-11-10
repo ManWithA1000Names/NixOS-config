@@ -27,6 +27,11 @@
     fsType = "ext4";
   };
 
+  fileSystems."/mnt/ssd" = {
+    device = "/dev/disk/by-uuid/b7df9669-1d68-44c6-988d-a410ba030953";
+    fsType = "ext4";
+  };
+
   services.nfs.server.enable = true;
   services.nfs.server.exports = ''
     /export 192.168.1.0/24(rw,sync,no_subtree_check)
