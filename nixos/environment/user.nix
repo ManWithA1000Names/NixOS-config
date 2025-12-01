@@ -19,7 +19,7 @@ in {
       fnm
       grim
       slurp
-      aria
+      aria2
       peco
       kitty
       zoxide
