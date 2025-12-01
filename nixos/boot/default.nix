@@ -7,7 +7,7 @@
     supportedFilesystems = [ "ntfs" ];
   };
 
-  systemd.watchdog.rebootTime = "0";
+  systemd.settings.Manager.RebootWatchdogSec = "0";
 
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
