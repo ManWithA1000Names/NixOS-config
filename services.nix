@@ -2,14 +2,14 @@
 let
 
   services = {
-    "git.local" = "8000";
-    "mealie.local" = "8001";
+    "git.local" = "8001";
+    "mealie.local" = "8002";
     "jellyfin.local" = "8096";
     "plane.local" = "7000";
   };
 
-  GITEA_DB_PORT = 9001;
-  HOMELAB_DASHBOARD_PORT = 8000;
+  GITEA_DB_PORT = "9001";
+  HOMELAB_DASHBOARD_PORT = "8000";
 
   # Helper to generate the avahi-publish commands
   publishCommands = builtins.concatStringsSep "\n"
