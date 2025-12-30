@@ -48,21 +48,8 @@
             # networking
             networking = {
               hostName = "atalanta";
-
-              useDHCP = false;
               firewall.enable = false;
-              interfaces.enp4s0 = {
-                ipv4.addresses = [{
-                  address = static_ip;
-                  prefixLength = 24;
-                }];
-              };
-
-              defaultGateway = {
-                address = "192.168.1.1";
-                interface = "enp4s0";
-              };
-              # nameservers = [ "1.1.1.1" "1.0.0.1" ];
+              networkmanager.enable = true;
             };
 
             system.stateVersion = "23.11";

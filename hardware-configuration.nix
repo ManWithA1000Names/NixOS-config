@@ -35,10 +35,16 @@
   services.nfs.server.enable = true;
   services.nfs.server.exports = ''
     /export 192.168.1.0/24(rw,sync,no_subtree_check)
+    /s-export 192.168.1.0/24(rw,sync,no_subtree_check)
   '';
 
   fileSystems."/export" = {
     device = "/mnt/hdd/share";
+    options = [ "bind" ];
+  };
+
+  fileSystems."/s-export" = {
+    device = "/mnt/ssd";
     options = [ "bind" ];
   };
 
