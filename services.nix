@@ -1,47 +1,20 @@
-{ static_ip, plane_app_port, plane_app_domain, base_domain_name, ... }:
+{ pkgs, plane_app_port, plane_app_domain, ... }:
 let
 
-  subdomain = subdomain: subdomain + "." + base_domain_name;
-  localurl = port: "http://127.0.0.1:${builtins.toString port}";
-
   services = {
-    adguard = rec {
-      port = 8001;
-      domain = subdomain "adguard";
-      url = "http://${domain}";
-    };
-    gitea = rec {
-      port = 8002;
-      domain = subdomain "git";
-      url = "http://${domain}";
-    };
-    mealie = rec {
-      port = 8004;
-      domain = subdomain "mealie";
-      url = "http://${domain}";
-    };
-    jellyfin = rec {
-      port = 8096;
-      domain = subdomain "fin";
-      url = "http://${domain}";
-    };
-    plane = rec {
-      port = plane_app_port;
-      domain = plane_app_domain;
-      url = "http://${domain}";
-    };
+    "git.local" = 8000;
+    "mealie.local" = "8001";
+    "jellyfin.local" = "8096";
+    ${plane_app_domain} = plane_app_port;
   };
-
-  toVirtualHosts = s:
-    builtins.foldl' (acc: name:
-      acc // {
-        ${s.${name}.domain} = {
-          locations."/".proxyPass = localurl s.${name}.port;
-        };
-      }) { } (builtins.attrNames s);
 
   GITEA_DB_PORT = 9001;
   HOMELAB_DASHBOARD_PORT = 8000;
+
+  # Helper to generate the avahi-publish commands
+  publishCommands = builtins.concatStringsSep "\n"
+    (builtins.map (name: "${pkgs.avahi}/bin/avahi-publish -a ${name} -R $IP &")
+      (builtins.attrNames services));
 in {
   services = {
     openssh = {
@@ -64,51 +37,39 @@ in {
       };
     };
 
-    nginx = {
+    caddy = {
       enable = true;
-
-      virtualHosts = {
-        ${base_domain_name} = {
-          default = true;
-          locations."/".proxyPass = localurl HOMELAB_DASHBOARD_PORT;
+      globalConfig = ''
+        local_certs
+      '';
+      virtualHosts = (builtins.mapAttrs
+        (name: port: { extraConfig = "reverse_proxy localhost:${port}"; })
+        services) // {
+          ":80" = {
+            extraConfig = "reverse_proxy localhost:${HOMELAB_DASHBOARD_PORT}";
+          };
+          ":443" = {
+            extraConfig = "reverse_proxy localhost:${HOMELAB_DASHBOARD_PORT}";
+          };
         };
-      } // (toVirtualHosts services);
-
     };
 
     homelab-dashboard = {
       enable = true;
       port = HOMELAB_DASHBOARD_PORT;
       title = "Local Cloud Control Center";
-      services =
-        builtins.mapAttrs (name: value: { inherit (value) port url; }) services;
-    };
-
-    adguardhome = {
-      enable = true;
-      inherit (services.adguard) port;
-      mutableSettings = false;
-      settings = {
-        dns.bootstrap_dns = [ "1.1.1.1" "1.0.0.1" ];
-        filtering.rewrites = [
-          {
-            answer = static_ip;
-            domain = base_domain_name;
-          }
-          {
-            answer = static_ip;
-            domain = subdomain "*";
-          }
-        ];
-      };
+      services = builtins.mapAttrs (name: value: {
+        port = value;
+        url = "http://${name}";
+      }) services;
     };
 
     gitea = {
       enable = true;
       lfs.enable = true;
       settings.server = {
-        DOMAIN = subdomain "git";
-        HTTP_PORT = services.gitea.port;
+        DOMAIN = "git.local";
+        HTTP_PORT = services."git.local";
       };
 
       database.port = GITEA_DB_PORT;
@@ -121,10 +82,34 @@ in {
 
     mealie = {
       enable = true;
-      inherit (services.mealie) port;
-      settings = { BASE_URL = "http://${""}"; };
+      port = services."mealie.local";
+      settings = { BASE_URL = "http://mealie.local"; };
     };
 
+  };
+
+  systemd.services.avahi-aliases = {
+    description = "Broadcast mDNS aliases for Caddy";
+    after = [ "avahi-daemon.service" "network.target" ];
+    wantedBy = [ "multi-user.target" ];
+    path = [ pkgs.avahi pkgs.coreutils pkgs.awk pkgs.iproute2 pkgs.gnugrep ];
+    serviceConfig = {
+      Type = "simple";
+      # This script finds the current IP and starts the background broadcasters
+      ExecStart = pkgs.writeShellScript "publish-aliases" ''
+        # Wait for an IP to be assigned (crucial for offline/Link-Local)
+        while ! hostname -I | grep -q '.'; do sleep 1; done
+
+        IP=$(ip -4 addr show up | grep -v "127.0.0.1" | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1)
+        echo "Registering aliases for IP: $IP"
+
+        ${publishCommands}
+
+        # Keep the service alive
+        wait
+      '';
+      Restart = "always";
+    };
   };
 
 }
