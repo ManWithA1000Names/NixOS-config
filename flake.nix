@@ -49,7 +49,7 @@
             networking = {
               hostName = "atalanta";
               firewall.enable = false;
-              # networkmanager.enable = true;
+              networkmanager.enable = true;
             };
 
             system.stateVersion = "23.11";
