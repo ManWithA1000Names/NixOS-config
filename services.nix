@@ -72,7 +72,7 @@ in {
         HTTP_PORT = pkgs.lib.toInt services."git.local";
       };
 
-      database.port = GITEA_DB_PORT;
+      database.port = pkgs.lib.toInt GITEA_DB_PORT;
     };
 
     jellyfin = {
@@ -82,7 +82,7 @@ in {
 
     mealie = {
       enable = true;
-      port = services."mealie.local";
+      port = pkgs.lib.toInt services."mealie.local";
       settings = { BASE_URL = "http://mealie.local"; };
     };
 
