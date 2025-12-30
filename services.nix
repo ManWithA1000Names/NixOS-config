@@ -69,7 +69,7 @@ in {
       lfs.enable = true;
       settings.server = {
         DOMAIN = "git.local";
-        HTTP_PORT = services."git.local";
+        HTTP_PORT = pkgs.lib.toInt services."git.local";
       };
 
       database.port = GITEA_DB_PORT;
