@@ -38,9 +38,9 @@
 
   # networking
   networking = {
-    hostName = "big-boss";
-    networkmanager.enable = true;
-    firewall.enable = false;
+    hostName = "big-boss"; # Host name for the mDNS to work.
+    firewall.enable = false; # Turn off the firewall.
+    networkmanager.enable = true; # Enable the networkmanager which also automatically handles IPv4LL (Link-Local)
   };
 
   # nvidia

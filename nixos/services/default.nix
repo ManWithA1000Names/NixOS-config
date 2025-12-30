@@ -20,5 +20,16 @@ _: {
       acceleration = "cuda";
       loadModels = [ "gemma3:27b" "deepseek-r1:32b" ];
     };
+
+    avahi = {
+      enable = true;
+      nssmdns4 = true;
+      publish = {
+        enable = true;
+        addresses = true;
+        workstation = true;
+        userServices = true;
+      };
+    };
   };
 }
