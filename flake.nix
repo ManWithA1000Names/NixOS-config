@@ -12,6 +12,11 @@
       nixosConfigurations.local-cloud = nixpkgs.lib.nixosSystem {
         inherit system;
 
+        specialArgs = {
+          plane_app_port = 7000;
+          plane_app_domain = "plane.local";
+        };
+
         modules = [
           homelab-dashboard.nixosModules.default
 

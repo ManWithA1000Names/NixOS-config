@@ -1,11 +1,11 @@
-{ pkgs, ... }:
+{ pkgs, plane_app_port, plane_app_domain, ... }:
 let
 
   services = {
     "git.local" = "8001";
     "mealie.local" = "8002";
     "jellyfin.local" = "8096";
-    "plane.local" = "7000";
+    ${plane_app_domain} = toString plane_app_port;
   };
 
   GITEA_DB_PORT = "9001";
