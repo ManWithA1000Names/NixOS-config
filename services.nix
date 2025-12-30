@@ -92,7 +92,7 @@ in {
     description = "Broadcast mDNS aliases for Caddy";
     after = [ "avahi-daemon.service" "network.target" ];
     wantedBy = [ "multi-user.target" ];
-    path = [ pkgs.avahi pkgs.coreutils pkgs.awk pkgs.iproute2 pkgs.gnugrep ];
+    path = [ pkgs.avahi pkgs.coreutils pkgs.gawk pkgs.iproute2 pkgs.gnugrep ];
     serviceConfig = {
       Type = "simple";
       # This script finds the current IP and starts the background broadcasters
