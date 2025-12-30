@@ -56,7 +56,7 @@ in {
 
     homelab-dashboard = {
       enable = true;
-      port = HOMELAB_DASHBOARD_PORT;
+      port = pkgs.lib.toInt HOMELAB_DASHBOARD_PORT;
       title = "Local Cloud Control Center";
       services = builtins.mapAttrs (name: value: {
         port = value;
