@@ -31,5 +31,10 @@ _: {
         userServices = true;
       };
     };
+
+    jellyfin = {
+      enable = true;
+      dataDir = "/mnt/ex-ssd/jellyfin/";
+    };
   };
 }
