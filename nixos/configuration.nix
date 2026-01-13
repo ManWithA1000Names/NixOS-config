@@ -40,7 +40,10 @@
   networking = {
     hostName = "big-boss"; # Host name for the mDNS to work.
     firewall.enable = false; # Turn off the firewall.
-    networkmanager.enable = true; # Enable the networkmanager which also automatically handles IPv4LL (Link-Local)
+    networkmanager.enable =
+      true; # Enable the networkmanager which also automatically handles IPv4LL (Link-Local)
+
+    hosts = { "127.0.0.1" = [ "plane.me" "jellyfin.me" "penpot.me" ]; };
   };
 
   # nvidia
