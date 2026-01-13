@@ -40,16 +40,26 @@ _: {
     nginx = {
       enable = true;
       virtualHosts = {
-        "jellyfin.me".locations."/" = {
+        "br41niac.net" = {
+          # Use a global redirect to the subdomain
+          # The browser will be told to go to plane.br41niac.net instead
+          extraConfig = "return 301 http://plane.br41niac.net$request_uri;";
+        };
+
+        "fin.br41niac.net".locations."/" = {
           proxyPass = "http://127.0.0.1:8096";
           proxyWebsockets = true;
         };
-        "plane.me".locations."/" = {
-          proxyPass = "http://127.0.0.1:8080";
+        "plane.br41niac.net".locations."/" = {
+          proxyPass = "http://127.0.0.1:8079";
           proxyWebsockets = true;
         };
-        "penpot.me".locations."/" = {
+        "penpot.br41niac.net".locations."/" = {
           proxyPass = "http://127.0.0.1:9001";
+          proxyWebsockets = true;
+        };
+        "erp.br41niac.net".locations."/" = {
+          proxyPass = "http://127.0.0.1:8080";
           proxyWebsockets = true;
         };
       };
