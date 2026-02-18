@@ -15,12 +15,6 @@ _: {
       settings.PermitRootLogin = "no";
     };
 
-    ollama = {
-      enable = true;
-      acceleration = "cuda";
-      loadModels = [ "gemma3:27b" "deepseek-r1:32b" ];
-    };
-
     avahi = {
       enable = true;
       nssmdns4 = true;
@@ -39,28 +33,60 @@ _: {
 
     nginx = {
       enable = true;
+
       virtualHosts = {
         "br41niac.net" = {
           # Use a global redirect to the subdomain
           # The browser will be told to go to plane.br41niac.net instead
           extraConfig = "return 301 http://plane.br41niac.net$request_uri;";
+          listen = [{
+            addr = "127.0.0.2";
+            port = 80;
+          }];
         };
 
-        "fin.br41niac.net".locations."/" = {
-          proxyPass = "http://127.0.0.1:8096";
-          proxyWebsockets = true;
+        "fin.br41niac.net" = {
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:8096";
+            proxyWebsockets = true;
+          };
+          listen = [{
+            addr = "127.0.0.2";
+            port = 80;
+          }];
         };
-        "plane.br41niac.net".locations."/" = {
-          proxyPass = "http://127.0.0.1:8079";
-          proxyWebsockets = true;
+
+        "plane.br41niac.net" = {
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:8079";
+            proxyWebsockets = true;
+          };
+          listen = [{
+            addr = "127.0.0.2";
+            port = 80;
+          }];
         };
-        "penpot.br41niac.net".locations."/" = {
-          proxyPass = "http://127.0.0.1:9001";
-          proxyWebsockets = true;
+
+        "penpot.br41niac.net" = {
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:9001";
+            proxyWebsockets = true;
+          };
+          listen = [{
+            addr = "127.0.0.2";
+            port = 80;
+          }];
         };
-        "erp.br41niac.net".locations."/" = {
-          proxyPass = "http://127.0.0.1:8080";
-          proxyWebsockets = true;
+
+        "erp.br41niac.net" = {
+          locations."/" = {
+            proxyPass = "http://127.0.0.1:8080";
+            proxyWebsockets = true;
+          };
+          listen = [{
+            addr = "127.0.0.2";
+            port = 80;
+          }];
         };
       };
     };
