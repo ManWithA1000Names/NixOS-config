@@ -43,7 +43,7 @@
     networkmanager.enable =
       true; # Enable the networkmanager which also automatically handles IPv4LL (Link-Local)
 
-    hosts."127.0.0.2" = [
+    hosts."127.0.0.1" = [
       "br41niac.net"
       "erp.br41niac.net"
       "fin.br41niac.net"
