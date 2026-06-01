@@ -276,7 +276,7 @@ hl.bind("SUPER + SHIFT + K", hl.dsp.window.kill())
 hl.bind("SUPER + SPACE", hl.dsp.window.float({ action = "toggle" }))
 
 hl.bind("SUPER + S", function()
-	hl.dispatch(hl.dsp.dpms({ action = "enable" }))
+	hl.dispatch(hl.dsp.dpms())
 	hl.exec_cmd(lock)
 end)
 hl.bind("SUPER + ESCAPE", hl.dsp.exec_cmd(lock))
