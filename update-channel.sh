@@ -6,4 +6,4 @@ if [ -z "$1" ]; then
 fi
 
 sudo nix-channel --add "https://nixos.org/channels/nixos-$1" nixos
-sudo nixos-rebuild --upgrade boot
+sudo nixos-rebuild --upgrade boot --cores 10

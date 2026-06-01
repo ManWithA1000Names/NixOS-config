@@ -21,6 +21,9 @@
     # to be able to change sound
     pulseaudio
 
+    # launcher
+    vicinae
+
     # themes
     volantes-cursors
   ];

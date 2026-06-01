@@ -32,6 +32,10 @@ switch: nixos
 	nixos-rebuild switch
 	@echo "DONE: switch"
 
+boot: nixos
+	nixos-rebuild boot
+	@echo "DONE: switch"
+
 hypr:
 	cp -r ./hypr ~/.config/
 	@echo "DONE: hypr"

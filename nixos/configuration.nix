@@ -57,16 +57,25 @@
   hardware = {
     graphics = {
       enable = true;
+
+      package = pkgs.mesa;
+
       # VA-API
       extraPackages = with pkgs; [ nvidia-vaapi-driver ];
     };
 
     nvidia = {
+      modesetting.enable = true;
+
       open =
         false; # nvidia open source kernel module, for 20 series and up only.
+
+      powerManagement.enable = false;
+      powerManagement.finegrained = false;
+
       nvidiaSettings = true;
-      modesetting.enable = true;
-      package = config.boot.kernelPackages.nvidiaPackages.stable;
+
+      package = config.boot.kernelPackages.nvidiaPackages.legacy_580;
     };
 
     bluetooth.enable = true;
