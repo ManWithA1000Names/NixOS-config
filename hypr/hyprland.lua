@@ -349,21 +349,48 @@ local function get_audio_sink_id(card_name)
 
 	local handle = io.popen(cmd)
 	if nil == handle then
-		hl.notification({
+		hl.notification.create({
 			text = "Failed to find the PipeWire ID for " .. card_name,
-			color = "#FF000000",
+			icon = 3,
+			color = "#FF0000",
+			timeout = 5000,
 		})
 		return "??"
 	end
 
 	local result = handle:read("*a")
 	handle:close()
+	result = result:match("^%s*(.-)%s*$")
 
 	return result
 end
 
-local headphones_ID = get_audio_sink_id("Razer Nari")
-local speakers_ID = get_audio_sink_id("Razer Nommo Chroma")
+hl.bind("ALT + F2", function()
+	-- Headphones
+	local card_name = "Razer Nari" --
 
-hl.bind("ALT + F2", hl.dsp.exec_cmd("wpctl set-default '" .. headphones_ID .. "'"))
-hl.bind("ALT + F3", hl.dsp.exec_cmd("wpctl set-default '" .. speakers_ID .. "'"))
+	hl.notification.create({
+		text = "Changing audio sink to: " .. card_name,
+		timeout = 5000,
+		color = "#32a852",
+		icon = 1,
+		font_size = 8,
+	})
+
+	hl.exec_cmd("wpctl set-default '" .. get_audio_sink_id(card_name) .. "'")
+end)
+
+hl.bind("ALT + F3", function()
+	-- Speakers
+	local card_name = "Razer Nommo Chroma"
+
+	hl.notification.create({
+		text = "Changing audio sink to: " .. card_name,
+		timeout = 5000,
+		color = "#32a852",
+		icon = 1,
+		font_size = 8,
+	})
+
+	hl.exec_cmd("wpctl set-default '" .. get_audio_sink_id(card_name) .. "'")
+end)
