@@ -9,10 +9,16 @@ local lock = [[hyprlock -c /tmp/hypr/hyprlock.conf]]
 
 hl.on("hyprland.start", function()
 	hl.exec_cmd(lock)
-	hl.exec_cmd("mako")
-	hl.exec_cmd("waybar")
-	hl.exec_cmd("/home/user/.config/hypr/scripts/startbg.sh")
-	hl.exec_cmd("vicinae server")
+	hl.exec_cmd("pidof mako || mako")
+	hl.exec_cmd("pidof waybar || waybar")
+	hl.exec_cmd("pidof hyprpaper || /home/user/.config/hypr/scripts/startbg.sh")
+	hl.exec_cmd("pidof vicinae-server || vicinae server")
+	hl.timer(function()
+		-- We need to set a timout here, otherwise
+		-- the focusing of the monitor happens too quickly
+		-- and does not result in the correct monitor being focused.
+		hl.dispatch(hl.dsp.focus({ monitor = "DP-3" }))
+	end, { timeout = 1, type = "oneshot" })
 end)
 
 ------------------
