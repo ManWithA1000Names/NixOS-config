@@ -11,7 +11,7 @@
   boot.initrd.kernelModules =
     [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
   boot.kernelModules = [ "kvm-intel" ];
-  boot.kernelParams = [ "fsck.mode=force" "fsck.repair=yes" ];
+  boot.kernelParams = [ "fsck.mode=force" "fsck.repair=yes" "consoleblank=30" ];
   boot.extraModulePackages = [ ];
 
   fileSystems."/" = {
