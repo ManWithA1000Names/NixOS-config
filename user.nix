@@ -12,6 +12,6 @@
 
     shell = pkgs.fish;
 
-    packages = with pkgs; [ fd bat eza aria file peco ripgrep starship ];
+    packages = with pkgs; [ fd bat eza aria2 file peco ripgrep starship ];
   };
 }
