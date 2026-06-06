@@ -30,6 +30,12 @@
     options = [ "bind" ];
   };
 
+  fileSystems."/export-ssd" = {
+    device = "/mnt/ex-ssd";
+    fsType = "none";
+    options = [ "bind" ];
+  };
+
   fileSystems."/mnt/ex-ssd" = {
     device = "/dev/disk/by-uuid/b7df9669-1d68-44c6-988d-a410ba030953";
     fsType = "ext4";
@@ -77,6 +83,7 @@
     enable = true;
     exports = ''
       /export 192.168.1.0/24(rw,sync,no_subtree_check)
+      /export-ssd 192.168.1.0/24(rw,sync,no_subtree_check)
     '';
   };
 }
