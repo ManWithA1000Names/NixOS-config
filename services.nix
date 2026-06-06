@@ -104,7 +104,7 @@ in {
       # This script finds the current IP and starts the background broadcasters
       ExecStart = pkgs.writeShellScript "publish-aliases" ''
         # Wait for an IP to be assigned (crucial for offline/Link-Local)
-        while ! hostname -I | grep -q '.'; do sleep 1; done
+        while ! ip -4 addr show up | grep -q 'inet '; do sleep 1; done
 
         IP=$(ip -4 addr show up | grep -v "127.0.0.1" | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1)
         echo "Registering aliases for IP: $IP"
