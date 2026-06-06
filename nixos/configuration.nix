@@ -42,14 +42,6 @@
     firewall.enable = false; # Turn off the firewall.
     networkmanager.enable =
       true; # Enable the networkmanager which also automatically handles IPv4LL (Link-Local)
-
-    hosts."127.0.0.1" = [
-      "br41niac.net"
-      "erp.br41niac.net"
-      "fin.br41niac.net"
-      "plane.br41niac.net"
-      "penpot.br41niac.net"
-    ];
   };
 
   # nvidia
