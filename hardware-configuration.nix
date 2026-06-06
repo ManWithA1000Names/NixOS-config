@@ -30,8 +30,8 @@
     options = [ "bind" ];
   };
 
-  fileSystems."/mnt" = {
-    device = "/dev/by-uuid/b7df9669-1d68-44c6-988d-a410ba030953";
+  fileSystems."/mnt/ex-ssd" = {
+    device = "/dev/disk/by-uuid/b7df9669-1d68-44c6-988d-a410ba030953";
     fsType = "ext4";
   };
 
