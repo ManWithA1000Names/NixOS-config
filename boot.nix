@@ -1,7 +1,7 @@
 { pkgs, ... }: {
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
-  systemd.watchdog.rebootTime = "0";
+  systemd.settings.Manager.RebootWatchdogSec = "0";
 
   i18n.defaultLocale = "en_US.UTF-8";
   console = {
