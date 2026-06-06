@@ -294,6 +294,12 @@ hl.bind("SUPER + H", hl.dsp.focus({ direction = "left" }))
 hl.bind("SUPER + K", hl.dsp.focus({ direction = "up" }))
 hl.bind("SUPER + J", hl.dsp.focus({ direction = "down" }))
 
+hl.bind("SUPER + SHIFT + L", hl.dsp.window.move({ direction = "right" }))
+hl.bind("SUPER + SHIFT + H", hl.dsp.window.move({ direction = "left" }))
+hl.unbind("SUPER + SHIFT + K") -- This is important to remove defautl keybinds.
+hl.bind("SUPER + SHIFT + K", hl.dsp.window.move({ direction = "up" }))
+hl.bind("SUPER + SHIFT + J", hl.dsp.window.move({ direction = "down" }))
+
 for i = 1, 10 do
 	local key = i % 10 -- 10 maps to key 0
 	hl.bind("SUPER + " .. key, hl.dsp.focus({ workspace = i }))
