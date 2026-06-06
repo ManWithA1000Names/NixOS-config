@@ -38,6 +38,7 @@
             # nix specifics
             nixpkgs.config.allowUnfree = true;
             nixpkgs.config.nvidia.acceptLicense = true;
+            nixpkgs.config.problems.handlers.nvidia-x11.broken = "ignore";
             nix.settings = {
               experimental-features = "nix-command flakes";
               auto-optimise-store = true;
