@@ -2,7 +2,7 @@
   description = "NixOS configuration with flakes";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     homelab-dashboard.url = "github:manwitha1000names/dashboard";
   };
 
