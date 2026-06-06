@@ -1,10 +1,14 @@
 { pkgs, plane_app_port, plane_app_domain, ... }:
 let
 
+  GIT_DOMAIN = "cloud-git.local";
+  MEALIE_DOMAIN = "cloud-mealie.local";
+  JELLYFIN_DOMAIN = "cloud-fin.local";
+
   services = {
-    "git.local" = "8001";
-    "mealie.local" = "8002";
-    "jellyfin.local" = "8096";
+    ${GIT_DOMAIN} = "8001";
+    ${MEALIE_DOMAIN} = "8002";
+    ${JELLYFIN_DOMAIN} = "8096";
     ${plane_app_domain} = toString plane_app_port;
   };
 
@@ -16,6 +20,7 @@ let
     (builtins.map (name: "${pkgs.avahi}/bin/avahi-publish -a ${name} -R $IP &")
       (builtins.attrNames services));
 in {
+
   services = {
     openssh = {
       enable = true;
@@ -29,6 +34,7 @@ in {
     avahi = {
       enable = true;
       nssmdns4 = true;
+      nssmdns6 = true;
       publish = {
         enable = true;
         addresses = true;
@@ -68,8 +74,8 @@ in {
       enable = true;
       lfs.enable = true;
       settings.server = {
-        DOMAIN = "git.local";
-        HTTP_PORT = pkgs.lib.toInt services."git.local";
+        DOMAIN = GIT_DOMAIN;
+        HTTP_PORT = pkgs.lib.toInt services.${GIT_DOMAIN};
       };
 
       database.port = pkgs.lib.toInt GITEA_DB_PORT;
@@ -82,8 +88,8 @@ in {
 
     mealie = {
       enable = true;
-      port = pkgs.lib.toInt services."mealie.local";
-      settings = { BASE_URL = "http://mealie.local"; };
+      port = pkgs.lib.toInt services.${MEALIE_DOMAIN};
+      settings = { BASE_URL = "http://${MEALIE_DOMAIN}"; };
     };
 
   };

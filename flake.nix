@@ -45,7 +45,7 @@
 
             # networking
             networking = {
-              hostName = "atalanta";
+              hostName = "cloud";
               firewall.enable = false;
               networkmanager.enable = true;
             };

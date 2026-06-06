@@ -8,44 +8,24 @@
 
   boot.initrd.availableKernelModules =
     [ "xhci_pci" "ehci_pci" "ahci" "usbhid" "sd_mod" ];
-  boot.initrd.kernelModules = [ ];
+  boot.initrd.kernelModules =
+    [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
   boot.kernelModules = [ "kvm-intel" ];
   boot.kernelParams = [ "fsck.mode=force" "fsck.repair=yes" ];
   boot.extraModulePackages = [ ];
 
   fileSystems."/" = {
-    device = "/dev/disk/by-uuid/2d3681b4-5c13-4894-895c-5678475867c5";
+    device = "/dev/disk/by-label/NIXROOT";
     fsType = "ext4";
   };
 
   fileSystems."/boot" = {
-    device = "/dev/disk/by-uuid/259D-6953";
+    device = "/dev/disk/by-label/NIXBOOT";
     fsType = "vfat";
   };
 
-  fileSystems."/mnt/hdd" = {
-    device = "/dev/disk/by-uuid/1e532807-f824-402e-9dde-9c90ae299fb5";
-    fsType = "ext4";
-  };
-
-  fileSystems."/mnt/ssd" = {
-    device = "/dev/disk/by-uuid/b7df9669-1d68-44c6-988d-a410ba030953";
-    fsType = "ext4";
-  };
-
-  services.nfs.server.enable = true;
-  services.nfs.server.exports = ''
-    /export 192.168.1.0/24(rw,sync,no_subtree_check)
-    /s-export 192.168.1.0/24(rw,sync,no_subtree_check)
-  '';
-
   fileSystems."/export" = {
-    device = "/mnt/hdd/share";
-    options = [ "bind" ];
-  };
-
-  fileSystems."/s-export" = {
-    device = "/mnt/ssd";
+    device = "/home/user";
     options = [ "bind" ];
   };
 
@@ -85,5 +65,12 @@
   services.logind = {
     lidSwitch = "ignore";
     lidSwitchDocked = "ignore";
+  };
+
+  services.nfs.server = {
+    enable = true;
+    exports = ''
+      /export 192.168.1.0/24(rw,sync,no_subtree_check)
+    '';
   };
 }
