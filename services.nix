@@ -83,7 +83,7 @@ in {
 
     jellyfin = {
       enable = true;
-      dataDir = "/mnt/hdd/jellyfin/";
+      dataDir = "/mnt/jellyfin/";
     };
 
     mealie = {
