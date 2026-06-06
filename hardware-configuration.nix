@@ -26,6 +26,7 @@
 
   fileSystems."/export" = {
     device = "/home/user";
+    fsType = "none";
     options = [ "bind" ];
   };
 
