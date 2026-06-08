@@ -8,7 +8,12 @@ _: {
 
     blueman.enable = true;
 
-    resolved.enable = true;
+    resolved = {
+      enable = true;
+      # This is handled by avahi.
+      # Leaving this on would cause race conditions.
+      settings.Resolve.MulticastDNS = "no";
+    };
 
     openssh = {
       enable = true;
