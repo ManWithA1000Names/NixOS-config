@@ -10,9 +10,9 @@ _: {
 
     resolved = {
       enable = true;
-      # This is handled by avahi.
-      # Leaving this on would cause race conditions.
-      settings.Resolve.MulticastDNS = "no";
+      # Make sure avahi and resolved do not
+      # publish the same information.
+      settings.Resolve.MulticastDNS = "resolve";
     };
 
     openssh = {
