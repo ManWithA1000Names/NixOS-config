@@ -1,4 +1,4 @@
-{ pkgs, plane_app_port, plane_app_domain, ... }:
+{ pkgs, ... }:
 let
 
   GIT_DOMAIN = "cloud-git.local";
@@ -9,7 +9,6 @@ let
     ${GIT_DOMAIN} = "8001";
     ${MEALIE_DOMAIN} = "8002";
     ${JELLYFIN_DOMAIN} = "8096";
-    ${plane_app_domain} = toString plane_app_port;
   };
 
   GITEA_DB_PORT = "9001";
