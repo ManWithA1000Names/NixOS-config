@@ -8,6 +8,7 @@
     wget
     gnumake
     python3
+    just
   ];
 
   programs = {
