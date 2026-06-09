@@ -6,7 +6,7 @@
     homelab-dashboard.url = "github:ManWithA1000Names/dashboard";
   };
 
-  output = { nixpkgs, homelab-dashboard, ... }:
+  outputs = { nixpkgs, homelab-dashboard, ... }:
     let system = "x86_64-linux";
     in {
       nixosConfigurations.big-boss = nixpkgs.lib.nixosSystem {
