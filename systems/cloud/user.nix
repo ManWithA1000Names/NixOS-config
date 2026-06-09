@@ -1,5 +1,5 @@
 { pkgs, ... }: {
-  users.user.user = {
+  users.users.user = {
     isNormalUser = true;
     description = "The human user";
 
