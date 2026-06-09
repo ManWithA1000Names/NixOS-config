@@ -4,4 +4,4 @@ if pid=$(pgrep "waybar"); then
 	kill "$pid"
 fi
 
-hyprctl dispatch exec waybar
+hyprctl dispatch 'hl.dsp.exec_cmd("waybar")'

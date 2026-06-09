@@ -8,35 +8,9 @@
     wget
     gnumake
     python3
-    xdg-utils
-
-    # wayland specific
-    mako
-    wl-clipboard
-    egl-wayland
-    waybar
-
-    # notfication support
-    libnotify
-    # to be able to change sound
-    pulseaudio
-
-    # launcher
-    vicinae
-
-    # themes
-    volantes-cursors
   ];
 
   programs = {
-    mtr.enable = true;
-
-    nix-ld.enable = true;
-
-    hyprlock.enable = true;
-
-    gamemode.enable = true;
-
     gnupg.agent = {
       enable = true;
       enableSSHSupport = true;
@@ -57,9 +31,9 @@
           p = "push";
           s = "status";
           ch = "checkout";
-          aa = "!git add $(git root)";
-          a = "add";
+          a = "!git add $(git root)";
           c = "commit -m";
+          ac = "!git a && git c";
         };
         pull = { rebase = false; };
       };

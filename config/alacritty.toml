@@ -21,3 +21,6 @@ yellow = "#e0af68"
 [colors.primary]
 background = "#24283b"
 foreground = "#a9b1d6"
+
+[window]
+opacity = 0.95

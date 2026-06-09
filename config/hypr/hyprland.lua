@@ -14,7 +14,7 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("pidof hyprpaper || /home/user/.config/hypr/scripts/startbg.sh")
 	hl.exec_cmd("pidof vicinae-server || vicinae server")
 	hl.timer(function()
-		-- We need to set a timout here, otherwise
+		-- We need to set a timeout here, otherwise
 		-- the focusing of the monitor happens too quickly
 		-- and does not result in the correct monitor being focused.
 		hl.dispatch(hl.dsp.focus({ monitor = "DP-3" }))
@@ -32,7 +32,7 @@ hl.env("LIBVA_DRIVER_NAME", "nvidia")
 hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
 
 ------------------
----- MONTIROS ----
+---- MONITORS ----
 ------------------
 
 -- 49" Samsung Monitor (1440p)
@@ -116,9 +116,9 @@ hl.config({
 
 		allow_session_lock_restore = true,
 
-		-- After a windows is openeded in a workspace
+		-- After a windows is opened in a workspace
 		-- all children windows will always be
-		-- openeded in the same workspace.
+		-- opened in the same workspace.
 		initial_workspace_tracking = 2,
 
 		middle_click_paste = false,
