@@ -12,6 +12,7 @@ switch SYSTEM:
 		echo "'{{SYSTEM}}' is not a recognized system.";
 		echo "Please choose one of:"
 		rg -N "nixosConfigurations\.([a-zA-Z0-9_-]+)\s*=" -r '$1' -o flake.nix --color never
+		exit
 	fi
 	sudo nixos-rebuild --flake {{REPO + "#" + SYSTEM}} switch
 
@@ -27,6 +28,7 @@ boot SYSTEM:
 		echo "'{{SYSTEM}}' is not a recognized system.";
 		echo "Please choose one of:"
 		rg -N "nixosConfigurations\.([a-zA-Z0-9_-]+)\s*=" -r '$1' -o flake.nix --color never
+		exit
 	fi
 	sudo nixos-rebuild --flake {{REPO + "#" + SYSTEM}} boot
 
