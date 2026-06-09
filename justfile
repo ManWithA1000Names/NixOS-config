@@ -9,9 +9,10 @@ switch SYSTEM:
 		exit
 	fi
 	if ! rg "nixosConfigurations.{{SYSTEM}}\s*=" > /dev/null; then
-		echo "'{{SYSTEM}}' is not a recognized system.";
-		echo "Please choose one of:"
+		echo -e "\033[31m'{{SYSTEM}}' is not a recognized system.\033[0m";
+		echo -e "Please choose one of:\033[32m"
 		rg -N "nixosConfigurations\.([a-zA-Z0-9_-]+)\s*=" -r '$1' -o flake.nix --color never
+		echo -ne "\033[0m"
 		exit
 	fi
 	sudo nixos-rebuild --flake {{REPO + "#" + SYSTEM}} switch
@@ -25,9 +26,10 @@ boot SYSTEM:
 		exit
 	fi
 	if ! rg "nixosConfigurations.{{SYSTEM}}\s*=" > /dev/null; then
-		echo "'{{SYSTEM}}' is not a recognized system.";
-		echo "Please choose one of:"
+		echo -e "\033[31m'{{SYSTEM}}' is not a recognized system.\033[0m";
+		echo -e "Please choose one of:\033[32m"
 		rg -N "nixosConfigurations\.([a-zA-Z0-9_-]+)\s*=" -r '$1' -o flake.nix --color never
+		echo -ne "\033[0m"
 		exit
 	fi
 	sudo nixos-rebuild --flake {{REPO + "#" + SYSTEM}} boot
