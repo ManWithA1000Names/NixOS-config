@@ -15,7 +15,7 @@ switch SYSTEM:
 		echo -ne "\033[0m"
 		exit
 	fi
-	sudo nixos-rebuild --flake {{REPO + "#" + SYSTEM}} switch
+	sudo nixos-rebuild --flake {{REPO + "#" + SYSTEM}} switch --refresh
 
 # Build a new generation of the system and switch to it on the next boot up.
 [script]
@@ -32,7 +32,7 @@ boot SYSTEM:
 		echo -ne "\033[0m"
 		exit
 	fi
-	sudo nixos-rebuild --flake {{REPO + "#" + SYSTEM}} boot
+	sudo nixos-rebuild --flake {{REPO + "#" + SYSTEM}} boot --refresh
 
 # Update the channel and all other inputs. This DOES NOT trigger a rebuild!
 update CHANNEL="":

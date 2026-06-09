@@ -43,7 +43,6 @@
             # By default nix has some aliases that need to go.
             environment.shellAliases = lib.mkForce { };
 
-            system.copySystemConfiguration = true;
             system.stateVersion = "26.05";
           })
         ];
@@ -86,7 +85,6 @@
             # By default nix has some aliases that need to go.
             environment.shellAliases = lib.mkForce { };
 
-            system.copySystemConfiguration = true;
             system.stateVersion = "26.05";
           })
         ];
