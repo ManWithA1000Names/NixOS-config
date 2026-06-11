@@ -8,10 +8,9 @@
     initrd.availableKernelModules =
       [ "xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod" ];
 
-    initrd.kernelModules =
-      [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
+    initrd.kernelModules = [];
 
-    kernelModules = [ "kvm-intel" ];
+    kernelModules = [ "kvm-intel" "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm"  ];
 
     kernelParams = [
       "nvidia_drm.modeset=1"
@@ -28,7 +27,12 @@
     supportedFilesystems = [ "nfs" "ntfs" ];
 
     loader = {
-      systemd-boot.enable = true;
+      systemd-boot = {
+        enable = true;
+        # With NVIDIA modules in the initrd each generation is ~225MB.
+        # A 511MB /boot can only safely hold 2 generations.
+        configurationLimit = 2;
+      };
       efi.canTouchEfiVariables = true;
     };
   };
