@@ -13,7 +13,15 @@
 
     kernelModules = [ "kvm-intel" ];
 
-    kernelParams = [ "nvidia_drm.modeset=1" "nvidia_drm.fbdev=1" ];
+    kernelParams = [
+      "nvidia_drm.modeset=1"
+      "nvidia_drm.fbdev=1"
+      # Prevent ACPI NVS from being saved/restored, avoiding firmware state
+      # corruption left behind by Windows between boots.
+      "acpi_sleep=nonvs"
+      # Force ACPI for all power state transitions.
+      "reboot=acpi"
+    ];
 
     extraModulePackages = [ ];
 
@@ -110,7 +118,9 @@
       open =
         false; # nvidia open source kernel module, for 20 series and up only.
 
-      powerManagement.enable = false;
+      # Required for proper GPU release during shutdown, especially after
+      # a prior Windows boot which leaves the GPU in an unexpected state.
+      powerManagement.enable = true;
       powerManagement.finegrained = false;
 
       nvidiaSettings = true;
