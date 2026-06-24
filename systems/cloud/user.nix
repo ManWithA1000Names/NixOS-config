@@ -7,8 +7,16 @@
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKvGywW2M93I8qbcmQanE9GAEggfUGiwLCP3fAPip6mV user@big-boss"
     ];
 
-    extraGroups =
-      [ "networkmanager" "wheel" "kvm" "input" "libvirtd" "docker" ];
+    extraGroups = [
+      "networkmanager"
+      "wheel"
+      "kvm"
+      "input"
+      "libvirtd"
+      "docker"
+      # Read/write access to the shared media library at /mnt/ex-ssd/media.
+      "media"
+    ];
 
     shell = pkgs.fish;
 

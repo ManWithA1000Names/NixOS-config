@@ -5,11 +5,33 @@ let
   MEALIE_DOMAIN = "cloud-mealie.local";
   JELLYFIN_DOMAIN = "cloud-fin.local";
 
+  # The "Arr" media-automation stack.
+  PROWLARR_DOMAIN = "cloud-prowlarr.local";
+  SONARR_DOMAIN = "cloud-sonarr.local";
+  RADARR_DOMAIN = "cloud-radarr.local";
+  BAZARR_DOMAIN = "cloud-bazarr.local";
+  SEERR_DOMAIN = "cloud-seerr.local";
+  QBIT_DOMAIN = "cloud-qbit.local";
+
   services = {
     ${GIT_DOMAIN} = "8001";
     ${MEALIE_DOMAIN} = "8002";
     ${JELLYFIN_DOMAIN} = "8096";
+
+    ${PROWLARR_DOMAIN} = "9696";
+    ${SONARR_DOMAIN} = "8989";
+    ${RADARR_DOMAIN} = "7878";
+    ${BAZARR_DOMAIN} = "6767";
+    ${SEERR_DOMAIN} = "5055";
+    ${QBIT_DOMAIN} = "8080";
   };
+
+  # Shared media storage for the Arr stack, qBittorrent and Jellyfin.
+  # Downloads and the final library live under a single root on the same
+  # filesystem so Sonarr/Radarr can import via instant hardlinks + atomic
+  # moves (no copy, no extra disk usage, seeding keeps working).
+  MEDIA_ROOT = "/mnt/ex-ssd/media";
+  MEDIA_GROUP = "media";
 
   GITEA_DB_PORT = "9001";
   HOMELAB_DASHBOARD_PORT = "8000";
@@ -36,6 +58,19 @@ in {
       virtualHosts = (builtins.mapAttrs
         (name: port: { extraConfig = "reverse_proxy localhost:${port}"; })
         services) // {
+          # qBittorrent's WebUI enforces Host-header validation and CSRF
+          # checks that reject reverse-proxied requests. Rewriting Host to
+          # the upstream and dropping Origin/Referer makes the request look
+          # local to qBittorrent, so its defaults can stay enabled.
+          ${QBIT_DOMAIN} = {
+            extraConfig = ''
+              reverse_proxy localhost:${services.${QBIT_DOMAIN}} {
+                header_up Host localhost:${services.${QBIT_DOMAIN}}
+                header_up -Origin
+                header_up -Referer
+              }
+            '';
+          };
           ":80" = {
             extraConfig = "reverse_proxy localhost:${HOMELAB_DASHBOARD_PORT}";
           };
@@ -77,7 +112,80 @@ in {
       settings = { BASE_URL = "http://${MEALIE_DOMAIN}"; };
     };
 
+    # --- Arr media-automation stack ---------------------------------------
+
+    # Indexer manager. Syncs its indexers into Sonarr/Radarr automatically.
+    prowlarr = {
+      enable = true;
+      settings.server.port = pkgs.lib.toInt services.${PROWLARR_DOMAIN};
+    };
+
+    # TV automation. Writes to the shared library, so it runs in "media".
+    sonarr = {
+      enable = true;
+      group = MEDIA_GROUP;
+      settings.server.port = pkgs.lib.toInt services.${SONARR_DOMAIN};
+    };
+
+    # Movie automation. Writes to the shared library, so it runs in "media".
+    radarr = {
+      enable = true;
+      group = MEDIA_GROUP;
+      settings.server.port = pkgs.lib.toInt services.${RADARR_DOMAIN};
+    };
+
+    # Subtitles. Writes subtitle files next to media, so it runs in "media".
+    bazarr = {
+      enable = true;
+      group = MEDIA_GROUP;
+      listenPort = pkgs.lib.toInt services.${BAZARR_DOMAIN};
+    };
+
+    # Requests portal (formerly Jellyseerr). Talks to APIs only, no media.
+    seerr = {
+      enable = true;
+      port = pkgs.lib.toInt services.${SEERR_DOMAIN};
+    };
+
+    # Download client. Writes downloads to the shared root, so it runs in
+    # "media" to keep hardlinks/imports possible across to the library.
+    qbittorrent = {
+      enable = true;
+      group = MEDIA_GROUP;
+      webuiPort = pkgs.lib.toInt services.${QBIT_DOMAIN};
+    };
+
   };
+
+  # Shared group that owns everything under MEDIA_ROOT. Every service that
+  # touches media files runs with this as its primary group (set above),
+  # and the human user is a member too (see cloud/user.nix).
+  users.groups.${MEDIA_GROUP} = { };
+
+  # Jellyfin only needs to *read* the library, so it joins "media" as a
+  # supplementary group rather than changing its primary group.
+  users.users.jellyfin.extraGroups = [ MEDIA_GROUP ];
+
+  # Create new files group-writable (0664/0775) so any "media" member can
+  # manage the content. Radarr/qBittorrent ship a stricter default UMask,
+  # hence mkForce.
+  systemd.services.sonarr.serviceConfig.UMask = pkgs.lib.mkForce "0002";
+  systemd.services.radarr.serviceConfig.UMask = pkgs.lib.mkForce "0002";
+  systemd.services.bazarr.serviceConfig.UMask = pkgs.lib.mkForce "0002";
+  systemd.services.qbittorrent.serviceConfig.UMask = pkgs.lib.mkForce "0002";
+
+  # Media directory tree. The setgid bit (leading 2 in 2775) makes new
+  # subdirectories inherit the "media" group automatically.
+  systemd.tmpfiles.rules = [
+    "d ${MEDIA_ROOT}                     2775 root        ${MEDIA_GROUP} - -"
+    "d ${MEDIA_ROOT}/torrents            2775 qbittorrent ${MEDIA_GROUP} - -"
+    "d ${MEDIA_ROOT}/torrents/incomplete 2775 qbittorrent ${MEDIA_GROUP} - -"
+    "d ${MEDIA_ROOT}/torrents/tv         2775 qbittorrent ${MEDIA_GROUP} - -"
+    "d ${MEDIA_ROOT}/torrents/movies     2775 qbittorrent ${MEDIA_GROUP} - -"
+    "d ${MEDIA_ROOT}/library             2775 root        ${MEDIA_GROUP} - -"
+    "d ${MEDIA_ROOT}/library/tv          2775 root        ${MEDIA_GROUP} - -"
+    "d ${MEDIA_ROOT}/library/movies      2775 root        ${MEDIA_GROUP} - -"
+  ];
 
   systemd.services.avahi-aliases = {
     description = "Broadcast mDNS aliases for Caddy";
