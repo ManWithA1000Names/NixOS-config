@@ -1,6 +1,10 @@
 { pkgs, ... }: {
   users.users.user = {
     isNormalUser = true;
+    # Pinned so the NFS export (hardware-configuration.nix) can squash every
+    # client onto this UID. The first normal user is 1000 already, so this is
+    # normally a no-op; it just makes the value explicit and referenceable.
+    uid = 1000;
     description = "The human user";
 
     openssh.authorizedKeys.keys = [

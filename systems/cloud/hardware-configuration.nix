@@ -54,6 +54,13 @@
     };
   };
 
+  # The external SSD is shared by Jellyfin, the media stack and the NFS
+  # export. Its mount-point must be root-owned, otherwise
+  # systemd-tmpfiles refuses to create anything beneath it ("unsafe path
+  # transition") whenever a regular user owns the mount-point. It stays
+  # group-writable by "media" so the human user can still manage the drive.
+  systemd.tmpfiles.rules = [ "d /mnt/ex-ssd 2775 root media - -" ];
+
   systemd.settings.Manager.RebootWatchdogSec = "0";
 
   swapDevices = [ ];
@@ -102,9 +109,16 @@
 
     nfs.server = {
       enable = true;
+      # The SSD export uses all_squash so that *any* client -- regardless of
+      # its local users/groups -- is mapped onto the server's "user" account
+      # and "media" group. That account owns the existing data and the media
+      # group owns the Arr-stack tree, so every client gets full read/write
+      # access without needing a matching UID/GID configured on its end.
       exports = ''
         /export 192.168.1.0/24(rw,sync,no_subtree_check)
-        /export-ssd 192.168.1.0/24(rw,sync,no_subtree_check)
+        /export-ssd 192.168.1.0/24(rw,sync,no_subtree_check,all_squash,anonuid=${
+          toString config.users.users.user.uid
+        },anongid=${toString config.users.groups.media.gid})
       '';
     };
   };
