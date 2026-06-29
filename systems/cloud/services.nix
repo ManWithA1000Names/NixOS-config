@@ -5,6 +5,8 @@ let
   MEALIE_DOMAIN = "cloud-mealie.local";
   JELLYFIN_DOMAIN = "cloud-fin.local";
 
+  PAPERLESS_DOMAIN = "cloud-paper.local";
+
   # The "Arr" media-automation stack.
   PROWLARR_DOMAIN = "cloud-prowlarr.local";
   SONARR_DOMAIN = "cloud-sonarr.local";
@@ -17,6 +19,7 @@ let
     ${GIT_DOMAIN} = "8001";
     ${MEALIE_DOMAIN} = "8002";
     ${JELLYFIN_DOMAIN} = "8096";
+    ${PAPERLESS_DOMAIN} = "28981";
 
     ${PROWLARR_DOMAIN} = "9696";
     ${SONARR_DOMAIN} = "8989";
@@ -112,6 +115,12 @@ in {
       settings = { BASE_URL = "http://${MEALIE_DOMAIN}"; };
     };
 
+    paperless = {
+      enable = true;
+      domain = PAPERLESS_DOMAIN;
+      port = pkgs.lib.toInt services.${PAPERLESS_DOMAIN};
+    };
+
     # --- Arr media-automation stack ---------------------------------------
 
     # Indexer manager. Syncs its indexers into Sonarr/Radarr automatically.
@@ -170,54 +179,59 @@ in {
   # supplementary group rather than changing its primary group.
   users.users.jellyfin.extraGroups = [ MEDIA_GROUP ];
 
-  # Create new files group-writable (0664/0775) so any "media" member can
-  # manage the content. Radarr/qBittorrent ship a stricter default UMask,
-  # hence mkForce.
-  systemd.services.sonarr.serviceConfig.UMask = pkgs.lib.mkForce "0002";
-  systemd.services.radarr.serviceConfig.UMask = pkgs.lib.mkForce "0002";
-  systemd.services.bazarr.serviceConfig.UMask = pkgs.lib.mkForce "0002";
-  systemd.services.qbittorrent.serviceConfig.UMask = pkgs.lib.mkForce "0002";
+  systemd = {
+    services = {
+      # Create new files group-writable (0664/0775) so any "media" member can
+      # manage the content. Radarr/qBittorrent ship a stricter default UMask,
+      # hence mkForce.
+      sonarr.serviceConfig.UMask = pkgs.lib.mkForce "0002";
+      radarr.serviceConfig.UMask = pkgs.lib.mkForce "0002";
+      bazarr.serviceConfig.UMask = pkgs.lib.mkForce "0002";
+      qbittorrent.serviceConfig.UMask = pkgs.lib.mkForce "0002";
 
-  # Media directory tree. The setgid bit (leading 2 in 2775) makes new
-  # subdirectories inherit the "media" group automatically.
-  #
-  # Note: the parent mount-point /mnt/ex-ssd must be root-owned for these
-  # rules to apply -- systemd-tmpfiles refuses an "unsafe path transition"
-  # from an unprivileged-user-owned directory into a root-owned one. That
-  # ownership is asserted next to the mount in hardware-configuration.nix.
-  systemd.tmpfiles.rules = [
-    "d ${MEDIA_ROOT}                     2775 root        ${MEDIA_GROUP} - -"
-    "d ${MEDIA_ROOT}/torrents            2775 qbittorrent ${MEDIA_GROUP} - -"
-    "d ${MEDIA_ROOT}/torrents/incomplete 2775 qbittorrent ${MEDIA_GROUP} - -"
-    "d ${MEDIA_ROOT}/torrents/tv         2775 qbittorrent ${MEDIA_GROUP} - -"
-    "d ${MEDIA_ROOT}/torrents/movies     2775 qbittorrent ${MEDIA_GROUP} - -"
-    "d ${MEDIA_ROOT}/library             2775 root        ${MEDIA_GROUP} - -"
-    "d ${MEDIA_ROOT}/library/tv          2775 root        ${MEDIA_GROUP} - -"
-    "d ${MEDIA_ROOT}/library/movies      2775 root        ${MEDIA_GROUP} - -"
-  ];
+      avahi-aliases = {
+        description = "Broadcast mDNS aliases for Caddy";
+        after = [ "avahi-daemon.service" "network.target" ];
+        wantedBy = [ "multi-user.target" ];
+        path =
+          [ pkgs.avahi pkgs.coreutils pkgs.gawk pkgs.iproute2 pkgs.gnugrep ];
+        serviceConfig = {
+          Type = "simple";
+          # This script finds the current IP and starts the background broadcasters
+          ExecStart = pkgs.writeShellScript "publish-aliases" ''
+            # Wait for an IP to be assigned (crucial for offline/Link-Local)
+            while ! ip -4 addr show up | grep -q 'inet '; do sleep 1; done
 
-  systemd.services.avahi-aliases = {
-    description = "Broadcast mDNS aliases for Caddy";
-    after = [ "avahi-daemon.service" "network.target" ];
-    wantedBy = [ "multi-user.target" ];
-    path = [ pkgs.avahi pkgs.coreutils pkgs.gawk pkgs.iproute2 pkgs.gnugrep ];
-    serviceConfig = {
-      Type = "simple";
-      # This script finds the current IP and starts the background broadcasters
-      ExecStart = pkgs.writeShellScript "publish-aliases" ''
-        # Wait for an IP to be assigned (crucial for offline/Link-Local)
-        while ! ip -4 addr show up | grep -q 'inet '; do sleep 1; done
+            IP=$(ip -4 addr show up | grep -v "127.0.0.1" | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1)
+            echo "Registering aliases for IP: $IP"
 
-        IP=$(ip -4 addr show up | grep -v "127.0.0.1" | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1)
-        echo "Registering aliases for IP: $IP"
+            ${publishCommands}
 
-        ${publishCommands}
-
-        # Keep the service alive
-        wait
-      '';
-      Restart = "always";
+            # Keep the service alive
+            wait
+          '';
+          Restart = "always";
+        };
+      };
     };
+
+    # Media directory tree. The setgid bit (leading 2 in 2775) makes new
+    # subdirectories inherit the "media" group automatically.
+    #
+    # Note: the parent mount-point /mnt/ex-ssd must be root-owned for these
+    # rules to apply -- systemd-tmpfiles refuses an "unsafe path transition"
+    # from an unprivileged-user-owned directory into a root-owned one. That
+    # ownership is asserted next to the mount in hardware-configuration.nix.
+    tmpfiles.rules = [
+      "d ${MEDIA_ROOT}                     2775 root        ${MEDIA_GROUP} - -"
+      "d ${MEDIA_ROOT}/torrents            2775 qbittorrent ${MEDIA_GROUP} - -"
+      "d ${MEDIA_ROOT}/torrents/incomplete 2775 qbittorrent ${MEDIA_GROUP} - -"
+      "d ${MEDIA_ROOT}/torrents/tv         2775 qbittorrent ${MEDIA_GROUP} - -"
+      "d ${MEDIA_ROOT}/torrents/movies     2775 qbittorrent ${MEDIA_GROUP} - -"
+      "d ${MEDIA_ROOT}/library             2775 root        ${MEDIA_GROUP} - -"
+      "d ${MEDIA_ROOT}/library/tv          2775 root        ${MEDIA_GROUP} - -"
+      "d ${MEDIA_ROOT}/library/movies      2775 root        ${MEDIA_GROUP} - -"
+    ];
   };
 
 }
