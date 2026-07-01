@@ -6,6 +6,7 @@ let
   JELLYFIN_DOMAIN = "cloud-fin.local";
 
   PAPERLESS_DOMAIN = "cloud-paper.local";
+  KAVITA_DOMAIN = "cloud-kavita.local";
 
   # The "Arr" media-automation stack.
   PROWLARR_DOMAIN = "cloud-prowlarr.local";
@@ -20,6 +21,7 @@ let
     ${MEALIE_DOMAIN} = "8002";
     ${JELLYFIN_DOMAIN} = "8096";
     ${PAPERLESS_DOMAIN} = "28981";
+    ${KAVITA_DOMAIN} = "5000";
 
     ${PROWLARR_DOMAIN} = "9696";
     ${SONARR_DOMAIN} = "8989";
@@ -119,6 +121,11 @@ in {
       enable = true;
       domain = PAPERLESS_DOMAIN;
       port = pkgs.lib.toInt services.${PAPERLESS_DOMAIN};
+    };
+
+    kavita = {
+      enable = true;
+      settings = { Port = pkgs.lib.toInt services.${KAVITA_DOMAIN}; };
     };
 
     # --- Arr media-automation stack ---------------------------------------
