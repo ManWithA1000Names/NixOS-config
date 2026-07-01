@@ -31,6 +31,21 @@ let
     ${QBIT_DOMAIN} = "8080";
   };
 
+  service_names = {
+    ${GIT_DOMAIN} = "Gitea";
+    ${MEALIE_DOMAIN} = "Mealie";
+    ${JELLYFIN_DOMAIN} = "Jellyfin";
+    ${PAPERLESS_DOMAIN} = "Paperless";
+    ${KAVITA_DOMAIN} = "Kavita";
+
+    ${PROWLARR_DOMAIN} = "Prowlarr";
+    ${SONARR_DOMAIN} = "Sonarr";
+    ${RADARR_DOMAIN} = "Radarr";
+    ${BAZARR_DOMAIN} = "Bazarr";
+    ${SEERR_DOMAIN} = "Seerr";
+    ${QBIT_DOMAIN} = "qBittorrent";
+  };
+
   # Shared media storage for the Arr stack, qBittorrent and Jellyfin.
   # Downloads and the final library live under a single root on the same
   # filesystem so Sonarr/Radarr can import via instant hardlinks + atomic
@@ -90,8 +105,8 @@ in {
       port = pkgs.lib.toInt HOMELAB_DASHBOARD_PORT;
       title = "Local Cloud Control Center";
       services = builtins.mapAttrs (name: value: {
-        port = pkgs.lib.toInt value;
         url = "http://${name}";
+        name = service_names.${name};
       }) services;
     };
 

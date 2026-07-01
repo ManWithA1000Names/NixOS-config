@@ -24,11 +24,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1782935671,
-        "narHash": "sha256-Z6Z5eNtUKFyS9UTD8zmrBWfZNBRmgFxkGR3CtRsgJi8=",
+        "lastModified": 1782937008,
+        "narHash": "sha256-9vtq+rdHMPc3FHPNBWUaXaKUGF5eDzRu6vSCvmqPGKk=",
         "owner": "ManWithA1000Names",
         "repo": "dashboard",
-        "rev": "77ef7a3f0544cbecf2103d468523b2f67b20a575",
+        "rev": "6ebc4b6ab6c9b676bb6273eaf25d577d2cc4b8cd",
         "type": "github"
       },
       "original": {
