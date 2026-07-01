@@ -126,6 +126,7 @@ in {
     kavita = {
       enable = true;
       settings = { Port = pkgs.lib.toInt services.${KAVITA_DOMAIN}; };
+      tokenKeyFile = "/var/lib/kavita/secrets/tokenkey";
     };
 
     # --- Arr media-automation stack ---------------------------------------
