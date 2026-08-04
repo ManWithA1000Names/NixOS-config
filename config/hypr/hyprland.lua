@@ -1,5 +1,6 @@
 local terminal = "alacritty"
-local browser = "helium --new-window --profile-directory=Default"
+-- local browser = "helium --new-window --profile-directory=Default"
+local browser = "vivaldi --new-window http://cloud.local"
 
 local lock = [[hyprlock -c /tmp/hypr/hyprlock.conf]]
 
