@@ -102,7 +102,29 @@
 
       nvidiaSettings = true;
       modesetting.enable = true;
-      package = config.boot.kernelPackages.nvidiaPackages.legacy_390;
+
+      # The 390.x legacy driver ships libglx.so.390.157 with no libglx.so
+      # symlink. X.Org searches for "glx" by canonical filename and skips
+      # NVIDIA's extensions dir, loading X.Org's own libglx.so instead.
+      # NVIDIA then refuses to initialize GLX and Kodi falls back to swrast.
+      # Fix: patch the .bin output to add the missing symlink so the
+      # name-based search finds NVIDIA's GLX first.
+      package =
+        let
+          base = config.boot.kernelPackages.nvidiaPackages.legacy_390;
+          patchedBin = pkgs.symlinkJoin {
+            name = "nvidia-x11-390-with-glx-symlink";
+            paths = [
+              (pkgs.runCommand "nvidia-glx-symlink" { } ''
+                mkdir -p $out/lib/xorg/modules/extensions
+                ln -s ${base.bin}/lib/xorg/modules/extensions/libglx.so.390.157 \
+                  $out/lib/xorg/modules/extensions/libglx.so
+              '')
+              base.bin
+            ];
+          };
+        in
+        base // { bin = patchedBin; };
 
       prime = {
         sync.enable = true;
@@ -140,17 +162,6 @@
   # '';
 
   services = {
-    # The 390.x legacy driver ships libglx.so.390.157 (versioned) with no
-    # libglx.so symlink. X.Org searches by name and falls through to its own
-    # libglx.so, causing NVIDIA to report "Failed to initialize the GLX module"
-    # and Kodi to software-render on CPU. Loading by absolute path bypasses the
-    # name search and forces NVIDIA's GLX.
-    xserver.extraConfig = ''
-      Section "Module"
-        Load "${config.hardware.nvidia.package.bin}/lib/xorg/modules/extensions/libglx.so.390.157"
-      EndSection
-    '';
-
     xserver.videoDrivers = [ "nvidia" ];
 
     logind.settings.Login = {
