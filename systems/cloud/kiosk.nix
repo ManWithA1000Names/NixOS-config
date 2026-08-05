@@ -12,6 +12,13 @@ let
   # Wrapper that auto-restarts Kodi if it ever exits (crash, update, etc.).
   # Lives in the Nix store so nothing is left untracked.
   kodiStartScript = pkgs.writeShellScript "kodi-kiosk-start" ''
+    # Under PRIME sync libvdpau resolves the backend name from the X screen and
+    # gets a non-"nvidia" answer, so vdp_device_create_x11 returns
+    # VDP_STATUS_NO_IMPLEMENTATION and Kodi silently falls back to CPU decode.
+    # Naming the backend explicitly restores hardware decode.
+    export VDPAU_DRIVER=nvidia
+    export VDPAU_DRIVER_PATH=/run/opengl-driver/lib/vdpau
+
     while true; do
       ${kodiWithAddons}/bin/kodi-standalone
     done
