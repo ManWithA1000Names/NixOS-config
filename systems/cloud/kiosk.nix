@@ -34,6 +34,9 @@ let
       | ${pkgs.gawk}/bin/awk '/ connected [0-9]/ && $1 !~ /^eDP/ {print $1; exit}')
     if [ -n "$tv" ]; then
       ${pkgs.xrandr}/bin/xrandr --output "$tv" --mode 3840x2160 --rate 30 || true
+      # xrandr mode changes reset PRIME Synchronization to 0, which causes tearing
+      # because the Intel scan-out races ahead of the NVIDIA render. Re-enable it.
+      ${pkgs.xrandr}/bin/xrandr --output "$tv" --set "PRIME Synchronization" 1 || true
     fi
 
     while true; do
