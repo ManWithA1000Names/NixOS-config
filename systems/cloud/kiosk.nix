@@ -24,6 +24,18 @@ let
       ${pkgs.coreutils}/bin/sleep 1
     done
 
+    # The EDID advertises 4096x2160 -- DCI cinema 4K, 17:9 -- as its widest
+    # mode, so X selects it, but the panel is 16:9 (EDID reports 1600x900mm).
+    # The TV then squeezes the image horizontally: everything looks narrow with
+    # nothing actually cropped. 3840x2160 is the matching 16:9 UHD mode, and is
+    # what consumer content is mastered for. Kodi has
+    # videoscreen.screenmode=DESKTOP, so it inherits whatever is set here.
+    tv=$(${pkgs.xrandr}/bin/xrandr \
+      | ${pkgs.gawk}/bin/awk '/ connected [0-9]/ && $1 !~ /^eDP/ {print $1; exit}')
+    if [ -n "$tv" ]; then
+      ${pkgs.xrandr}/bin/xrandr --output "$tv" --mode 3840x2160 --rate 30 || true
+    fi
+
     while true; do
       ${kodiWithAddons}/bin/kodi-standalone
     done
@@ -109,5 +121,42 @@ in {
     "d  /home/user/.kodi/userdata                        0755 user users - -"
     "L+ /home/user/.kodi/userdata/advancedsettings.xml   -    user users - ${kodiAdvancedSettings}"
   ];
+
+  # Two separate defects, same fix point. WirePlumber restores a saved 40%
+  # level on the HDMI sink, which is why Kodi needs the TV at 60 to match what
+  # every other input does at 10-15. And the analog headphone jack is the
+  # system default sink, so anything that does not pin a device explicitly --
+  # mpv, for instance -- plays into the laptop's headphone socket rather than
+  # the TV. Kodi is unaffected by that second one only because it names the
+  # HDMI device outright in its own settings.
+  #
+  # pactl is used rather than wpctl because it addresses sinks by name; wpctl
+  # needs the numeric object id, which is not stable across boots.
+  systemd.user.services.hdmi-audio-defaults = {
+    description = "Make HDMI the default sink and pin it to full volume";
+    wantedBy = [ "default.target" ];
+    after = [ "pipewire-pulse.service" "wireplumber.service" ];
+    path = [ pkgs.pulseaudio pkgs.coreutils pkgs.gnugrep ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      sink=alsa_output.pci-0000_00_03.0.hdmi-stereo
+
+      # The node shows up a moment after wireplumber itself is ready.
+      tries=0
+      until pactl list sinks short | grep -q "$sink"; do
+        tries=$((tries + 1))
+        [ $tries -ge 30 ] && exit 0
+        sleep 1
+      done
+
+      pactl set-default-sink "$sink"
+      pactl set-sink-volume "$sink" 100%
+    '';
+  };
 
 }
