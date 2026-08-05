@@ -53,33 +53,32 @@ in {
     enable = true;
     # videoDrivers = [ "nvidia" ] is already declared in hardware-configuration.nix.
 
-    displayManager = {
-      lightdm = {
-        enable = true;
-        autoLogin = {
-          enable = true;
-          user = "user";
-        };
-      };
+    displayManager.lightdm.enable = true;
+  };
 
-      defaultSession = "kodi-kiosk";
-      sessionPackages = [ kodiKioskSession ];
-
-      # Run once per X session before the window manager starts.
-      sessionCommands = ''
-        # Disable the laptop's built-in panel; only the HDMI output should be
-        # active. Under NVIDIA PRIME sync the panel is usually "eDP-1-1" (PRIME
-        # appends the extra -1). Run `xrandr --query` after first boot to confirm.
-        ${pkgs.xorg.xrandr}/bin/xrandr --output eDP-1-1 --off 2>/dev/null || \
-        ${pkgs.xorg.xrandr}/bin/xrandr --output eDP-1 --off 2>/dev/null || true
-
-        # Kill X11's own DPMS and screen blanking. Kodi manages idle/blanking
-        # itself; X11 DPMS firing mid-movie would blank the screen unexpectedly.
-        ${pkgs.xorg.xset}/bin/xset s off
-        ${pkgs.xorg.xset}/bin/xset dpms 0 0 0
-        ${pkgs.xorg.xset}/bin/xset -dpms
-      '';
+  services.displayManager = {
+    autoLogin = {
+      enable = true;
+      user = "user";
     };
+
+    defaultSession = "kodi-kiosk";
+    sessionPackages = [ kodiKioskSession ];
+
+    # Run once per X session before the window manager starts.
+    sessionCommands = ''
+      # Disable the laptop's built-in panel; only the HDMI output should be
+      # active. Under NVIDIA PRIME sync the panel is usually "eDP-1-1" (PRIME
+      # appends the extra -1). Run `xrandr --query` after first boot to confirm.
+      ${pkgs.xrandr}/bin/xrandr --output eDP-1-1 --off 2>/dev/null || \
+      ${pkgs.xrandr}/bin/xrandr --output eDP-1 --off 2>/dev/null || true
+
+      # Kill X11's own DPMS and screen blanking. Kodi manages idle/blanking
+      # itself; X11 DPMS firing mid-movie would blank the screen unexpectedly.
+      ${pkgs.xset}/bin/xset s off
+      ${pkgs.xset}/bin/xset dpms 0 0 0
+      ${pkgs.xset}/bin/xset -dpms
+    '';
   };
 
   environment.systemPackages = with pkgs; [
