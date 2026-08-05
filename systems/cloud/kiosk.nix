@@ -18,11 +18,17 @@ let
   '';
 
   # LightDM session descriptor picked up via sessionPackages.
-  kodiKioskSession = pkgs.writeTextDir "share/xsessions/kodi-kiosk.desktop" ''
+  # providedSessions is required by the NixOS sessionPackages type check.
+  kodiKioskSession = pkgs.runCommand "kodi-kiosk-session" {
+    passthru.providedSessions = [ "kodi-kiosk" ];
+  } ''
+    mkdir -p $out/share/xsessions
+    cat > $out/share/xsessions/kodi-kiosk.desktop <<'EOF'
     [Desktop Entry]
     Name=kodi-kiosk
     Exec=${kodiStartScript}
     Type=Application
+    EOF
   '';
 
   # Read-only by Kodi (never written to), so a Nix-store symlink is safe.
