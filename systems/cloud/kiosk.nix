@@ -69,9 +69,10 @@ in {
     sessionCommands = ''
       # Disable the laptop's built-in panel; only the HDMI output should be
       # active. Under NVIDIA PRIME sync the panel is usually "eDP-1-1" (PRIME
-      # appends the extra -1). Run `xrandr --query` after first boot to confirm.
+      # appends the extra -1).
       ${pkgs.xrandr}/bin/xrandr --output eDP-1-1 --off 2>/dev/null || \
       ${pkgs.xrandr}/bin/xrandr --output eDP-1 --off 2>/dev/null || true
+
 
       # Kill X11's own DPMS and screen blanking. Kodi manages idle/blanking
       # itself; X11 DPMS firing mid-movie would blank the screen unexpectedly.
@@ -90,6 +91,8 @@ in {
   # Lay down the Kodi userdata directory and drop the advancedsettings symlink.
   # 'L+' means: create/replace with a managed symlink; NixOS is authoritative.
   systemd.tmpfiles.rules = [
+    "d  /home/user/.kodi                                 0755 user users - -"
+    "d  /home/user/.kodi/temp                            0755 user users - -"
     "d  /home/user/.kodi/userdata                        0755 user users - -"
     "L+ /home/user/.kodi/userdata/advancedsettings.xml   -    user users - ${kodiAdvancedSettings}"
   ];

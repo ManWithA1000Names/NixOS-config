@@ -140,6 +140,17 @@
   # '';
 
   services = {
+    # The 390.x legacy driver ships libglx.so.390.157 (versioned) with no
+    # libglx.so symlink. X.Org searches by name and falls through to its own
+    # libglx.so, causing NVIDIA to report "Failed to initialize the GLX module"
+    # and Kodi to software-render on CPU. Loading by absolute path bypasses the
+    # name search and forces NVIDIA's GLX.
+    xserver.extraConfig = ''
+      Section "Module"
+        Load "${config.hardware.nvidia.package.bin}/lib/xorg/modules/extensions/libglx.so.390.157"
+      EndSection
+    '';
+
     xserver.videoDrivers = [ "nvidia" ];
 
     logind.settings.Login = {
