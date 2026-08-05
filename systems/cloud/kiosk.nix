@@ -12,12 +12,17 @@ let
   # Wrapper that auto-restarts Kodi if it ever exits (crash, update, etc.).
   # Lives in the Nix store so nothing is left untracked.
   kodiStartScript = pkgs.writeShellScript "kodi-kiosk-start" ''
-    # Under PRIME sync libvdpau resolves the backend name from the X screen and
-    # gets a non-"nvidia" answer, so vdp_device_create_x11 returns
-    # VDP_STATUS_NO_IMPLEMENTATION and Kodi silently falls back to CPU decode.
-    # Naming the backend explicitly restores hardware decode.
-    export VDPAU_DRIVER=nvidia
-    export VDPAU_DRIVER_PATH=/run/opengl-driver/lib/vdpau
+    # At boot the NVIDIA X screen comes up with MetaModes "NULL" (640x480):
+    # the TV hangs off the Intel provider and PRIME only wires it in a moment
+    # later. Kodi launched inside that window gets VDP_STATUS_NO_IMPLEMENTATION
+    # from vdp_device_create_x11 and then runs the whole session on CPU decode.
+    # Wait for an output to have a real mode before the first launch.
+    tries=0
+    until ${pkgs.xrandr}/bin/xrandr | ${pkgs.gnugrep}/bin/grep -qE ' connected .*[0-9]+x[0-9]+\+'; do
+      tries=$((tries + 1))
+      [ $tries -ge 60 ] && break
+      ${pkgs.coreutils}/bin/sleep 1
+    done
 
     while true; do
       ${kodiWithAddons}/bin/kodi-standalone
