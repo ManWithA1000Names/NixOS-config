@@ -61,6 +61,7 @@
 
           ./systems/cloud/user.nix
           ./systems/cloud/services.nix
+          ./systems/cloud/kiosk.nix
           ./systems/cloud/hardware-configuration.nix
 
           ({ lib, ... }: {
