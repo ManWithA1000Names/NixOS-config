@@ -63,32 +63,4 @@
   };
 
   services.xserver.videoDrivers = [ "nvidia" ];
-
-  # TODO: fill in after first boot.
-  #
-  # When the TV is in standby the HDMI hotplug signal disappears and X loses
-  # the display configuration. Fix: force X to always treat the HDMI output as
-  # connected with a static mode, regardless of hotplug state.
-  #
-  # Steps:
-  #   1. With TV on and plugged in, run: xrandr --query
-  #      Note the exact HDMI output name (e.g. "HDMI-0" or "HDMI-1").
-  #   2. Extract the TV's EDID:
-  #        cat /sys/class/drm/card0-<output-name>/edid > /tmp/tv.bin
-  #      Copy tv.bin into this repo at systems/cloud-media-console/tv-edid.bin
-  #   3. Uncomment and fill in the block below.
-  #
-  # services.xserver.extraConfig = ''
-  #   Section "Monitor"
-  #     Identifier "<HDMI-output-name>"
-  #     Option "ConnectedMonitor" "DFP"
-  #     Option "CustomEDID" "<HDMI-output-name>:${./tv-edid.bin}"
-  #     Option "PreferredMode" "3840x2160"
-  #   EndSection
-  #   Section "Monitor"
-  #     Identifier "<eDP-name>"
-  #     Option "Ignore" "true"
-  #   EndSection
-  # '';
-
 }
