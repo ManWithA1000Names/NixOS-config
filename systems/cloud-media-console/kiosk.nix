@@ -79,6 +79,13 @@ let
   '';
 in {
 
+  services.pipewire = {
+    enable = true;
+    alsa.enable = true;
+    alsa.support32Bit = true;
+    pulse.enable = true;
+  };
+
   services.xserver = {
     enable = true;
     # videoDrivers = [ "nvidia" ] is already declared in hardware-configuration.nix.
