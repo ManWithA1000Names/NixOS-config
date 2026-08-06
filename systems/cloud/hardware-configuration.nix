@@ -65,6 +65,7 @@
   systemd.network.networks."10-ethernet" = {
     matchConfig.Type = "ether";
     networkConfig.DHCP = "ipv4";
+    dhcpV4Config.RequestAddress = "192.168.1.108";
   };
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
