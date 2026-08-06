@@ -75,7 +75,7 @@
             networking = {
               hostName = "cloud";
               firewall.enable = false;
-              networkmanager.enable = true;
+              useNetworkd = true;
             };
 
             # By default nix has some aliases that need to go.
@@ -117,7 +117,7 @@
             networking = {
               hostName = "cloud-media-console";
               firewall.enable = false;
-              networkmanager.enable = true;
+              useNetworkd = true;
             };
 
             # By default nix has some aliases that need to go.
