@@ -6,11 +6,7 @@
       [ "xhci_pci" "ehci_pci" "ahci" "usbhid" "sd_mod" ];
     kernelModules = [ "kvm-intel" ];
 
-    kernelParams = [
-      "fsck.mode=force"
-      "fsck.repair=yes"
-      "consoleblank=30"
-    ];
+    kernelParams = [ "consoleblank=30" ];
 
     extraModulePackages = [ ];
 
