@@ -9,6 +9,7 @@
     kernelParams = [
       "fsck.mode=force"
       "fsck.repair=yes"
+      "consoleblank=30"
     ];
 
     extraModulePackages = [ ];
