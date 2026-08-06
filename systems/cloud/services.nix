@@ -63,6 +63,11 @@ let
 in {
 
   services = {
+    # avahi-aliases (below) publishes Caddy's hostname aliases via the
+    # avahi-daemon D-Bus API. That API is rejected with "Not permitted"
+    # unless user-triggered publishing is allowed.
+    avahi.publish.userServices = true;
+
     caddy = {
       enable = true;
       globalConfig = ''
