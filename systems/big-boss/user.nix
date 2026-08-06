@@ -30,7 +30,12 @@ in {
       pamixer
       ripgrep
       discord
-      firefox
+      (firefox.override {
+        extraPrefs = ''
+          defaultPref("media.hardware-video-decoding-vulkan.enabled", true);
+          defaultPref("media.hardware-video-decoding-vulkan.direct-export.enabled", true);
+        '';
+      })
       starship
       playerctl
       alacritty
