@@ -20,7 +20,10 @@ let
     tries=0
     until ${pkgs.xrandr}/bin/xrandr | ${pkgs.gnugrep}/bin/grep -qE ' connected .*[0-9]+x[0-9]+\+'; do
       tries=$((tries + 1))
-      [ $tries -ge 60 ] && break
+      if [ $tries -ge 60 ]; then
+        echo "kodi-kiosk: timed out waiting for a connected display -- VDPAU may be unavailable" >&2
+        break
+      fi
       ${pkgs.coreutils}/bin/sleep 1
     done
 
@@ -111,7 +114,6 @@ in {
   };
 
   environment.systemPackages = with pkgs; [
-    chromium
     libcec      # provides cec-client for ad-hoc CEC commands from the shell
     kodiWithAddons
   ];
@@ -147,16 +149,17 @@ in {
     };
 
     script = ''
-      sink=alsa_output.pci-0000_00_03.0.hdmi-stereo
-
-      # The node shows up a moment after wireplumber itself is ready.
+      # Wait for any HDMI sink to appear. Matching on "hdmi" in the sink
+      # name is stable across PCI re-enumeration and BIOS updates unlike
+      # a hardcoded alsa_output.pci-<addr> name.
       tries=0
-      until pactl list sinks short | grep -q "$sink"; do
+      until pactl list sinks short | grep -qi hdmi; do
         tries=$((tries + 1))
         [ $tries -ge 30 ] && exit 0
         sleep 1
       done
 
+      sink=$(pactl list sinks short | awk '/[Hh][Dd][Mm][Ii]/ {print $2; exit}')
       pactl set-default-sink "$sink"
       pactl set-sink-volume "$sink" 100%
     '';
