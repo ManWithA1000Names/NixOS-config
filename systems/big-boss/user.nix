@@ -8,7 +8,7 @@ in {
     description = "The human user";
 
     extraGroups =
-      [ "networkmanager" "wheel" "kvm" "input" "libvirtd" "docker" ];
+      [ "networkmanager" "wheel" "kvm" "input" "docker" ];
 
     shell = pkgs.fish;
 
