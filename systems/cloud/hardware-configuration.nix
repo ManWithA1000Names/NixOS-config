@@ -4,22 +4,11 @@
   boot = {
     initrd.availableKernelModules =
       [ "xhci_pci" "ehci_pci" "ahci" "usbhid" "sd_mod" ];
-    initrd.kernelModules =
-      [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
-
     kernelModules = [ "kvm-intel" ];
 
     kernelParams = [
       "fsck.mode=force"
       "fsck.repair=yes"
-      "consoleblank=30"
-      # Required for Plymouth to take over the framebuffer early enough to
-      # hide the kernel log on the TV. nvidia_drm.modeset=1 is already implied
-      # by hardware.nvidia.modesetting.enable = true but listed explicitly here
-      # so the intent is obvious.
-      "nvidia_drm.modeset=1"
-      "quiet"
-      "splash"
     ];
 
     extraModulePackages = [ ];
@@ -28,8 +17,6 @@
       systemd-boot.enable = true;
       efi.canTouchEfiVariables = true;
     };
-
-    plymouth.enable = true;
   };
 
   console = {
@@ -89,81 +76,38 @@
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
 
-  # nvidia
+  nixpkgs.config.problems.handlers.nvidia-x11.broken = "ignore";
+  nixpkgs.config.problems.handlers.nvidia-kernel-modules.broken = "ignore";
+
+  # Load the NVIDIA modules early so that udev rules (which create
+  # /dev/nvidia*, /dev/nvidia-uvm, etc.) fire before any service starts.
+  # nvidia_uvm is intentionally omitted here: the nvidia module sets a
+  # softdep so it loads automatically after nvidia via modprobe, which is
+  # the correct ordering on non-NVLink hardware.
+  boot.initrd.kernelModules = [ "nvidia" "nvidia_modeset" "nvidia_drm" ];
+
   hardware = {
     cpu.intel.updateMicrocode =
       lib.mkDefault config.hardware.enableRedistributableFirmware;
 
-    graphics = { enable = true; };
+    # Required for EGL/render-node access (e.g. ffmpeg -hwaccel cuda,
+    # headless OpenGL). Does not start a display server.
+    graphics.enable = true;
 
     nvidia = {
-      # nvidia open source kernel module, for 20 series and up only.
       open = false;
-
-      nvidiaSettings = true;
+      # Exposes /dev/dri/renderD* so compute clients (ffmpeg, etc.) can
+      # reach the GPU without a display. No GLX patch needed headlessly.
       modesetting.enable = true;
-
-      # The 390.x legacy driver ships libglx.so.390.157 with no libglx.so
-      # symlink. X.Org searches for "glx" by canonical filename and skips
-      # NVIDIA's extensions dir, loading X.Org's own libglx.so instead.
-      # NVIDIA then refuses to initialize GLX and Kodi falls back to swrast.
-      # Fix: patch the .bin output to add the missing symlink so the
-      # name-based search finds NVIDIA's GLX first.
-      package =
-        let
-          base = config.boot.kernelPackages.nvidiaPackages.legacy_390;
-          patchedBin = pkgs.symlinkJoin {
-            name = "nvidia-x11-390-with-glx-symlink";
-            paths = [
-              (pkgs.runCommand "nvidia-glx-symlink" { } ''
-                mkdir -p $out/lib/xorg/modules/extensions
-                ln -s ${base.bin}/lib/xorg/modules/extensions/libglx.so.390.157 \
-                  $out/lib/xorg/modules/extensions/libglx.so
-              '')
-              base.bin
-            ];
-          };
-        in
-        base // { bin = patchedBin; };
-
-      prime = {
-        sync.enable = true;
-        intelBusId = "PCI:0:2:0";
-        nvidiaBusId = "PCI:1:0:0";
-      };
+      package = config.boot.kernelPackages.nvidiaPackages.legacy_390;
     };
   };
 
-  # TODO: fill in after first boot.
-  #
-  # When the TV is in standby the HDMI hotplug signal disappears and X loses
-  # the display configuration. Fix: force X to always treat the HDMI output as
-  # connected with a static mode, regardless of hotplug state.
-  #
-  # Steps:
-  #   1. With TV on and plugged in, run: xrandr --query
-  #      Note the exact HDMI output name (e.g. "HDMI-0" or "HDMI-1").
-  #   2. Extract the TV's EDID:
-  #        cat /sys/class/drm/card0-<output-name>/edid > /tmp/tv.bin
-  #      Copy tv.bin into this repo at systems/cloud/tv-edid.bin
-  #   3. Uncomment and fill in the block below.
-  #
-  # services.xserver.extraConfig = ''
-  #   Section "Monitor"
-  #     Identifier "<HDMI-output-name>"
-  #     Option "ConnectedMonitor" "DFP"
-  #     Option "CustomEDID" "<HDMI-output-name>:${./tv-edid.bin}"
-  #     Option "PreferredMode" "3840x2160"
-  #   EndSection
-  #   Section "Monitor"
-  #     Identifier "<eDP-name>"
-  #     Option "Ignore" "true"
-  #   EndSection
-  # '';
+  # Activates hardware.nvidia (udev rules, kernel modules, driver libraries)
+  # without starting X. services.xserver.enable remains false (default).
+  services.xserver.videoDrivers = [ "nvidia" ];
 
   services = {
-    xserver.videoDrivers = [ "nvidia" ];
-
     logind.settings.Login = {
       HandleLidSwitch = "ignore";
       HandleLidSwitchDocked = "ignore";

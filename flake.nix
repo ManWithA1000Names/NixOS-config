@@ -61,8 +61,6 @@
 
           ./systems/cloud/user.nix
           ./systems/cloud/services.nix
-          ./systems/cloud/kiosk.nix
-          ./systems/cloud/mpv.nix
           ./systems/cloud/hardware-configuration.nix
 
           ({ lib, ... }: {
@@ -74,12 +72,50 @@
 
             security.rtkit.enable = true;
 
-            nixpkgs.config.problems.handlers.nvidia-x11.broken = "ignore";
-            nixpkgs.config.problems.handlers.nvidia-kernel-modules.broken =
-              "ignore";
-
             networking = {
               hostName = "cloud";
+              firewall.enable = false;
+              networkmanager.enable = true;
+            };
+
+            # By default nix has some aliases that need to go.
+            environment.shellAliases = lib.mkForce { };
+
+            system.stateVersion = "26.05";
+          })
+        ];
+      };
+
+      nixosConfigurations.cloud-media-console = nixpkgs.lib.nixosSystem {
+        inherit system;
+
+        modules = [
+          homelab-dashboard.nixosModules.default
+
+          ./systems/common/nix.nix
+          ./systems/common/programs.nix
+          ./systems/common/services.nix
+          ./systems/common/virtualisation.nix
+
+          ./systems/cloud/user.nix
+          ./systems/cloud/services.nix
+          ./systems/cloud/hardware-configuration.nix
+
+          ./systems/cloud-media-console/hardware-configuration.nix
+          ./systems/cloud-media-console/kiosk.nix
+          ./systems/cloud-media-console/mpv.nix
+
+          ({ lib, ... }: {
+            time.timeZone = "Europe/Athens";
+            i18n = {
+              defaultLocale = "en_US.UTF-8";
+              supportedLocales = [ "en_US.UTF-8/UTF-8" "el_GR.UTF-8/UTF-8" ];
+            };
+
+            security.rtkit.enable = true;
+
+            networking = {
+              hostName = "cloud-media-console";
               firewall.enable = false;
               networkmanager.enable = true;
             };
