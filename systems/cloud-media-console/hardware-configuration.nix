@@ -5,7 +5,7 @@
 
   boot = {
     initrd.kernelModules =
-      [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
+      [ "nvidia" "nvidia_modeset" "nvidia_drm" ];
 
     kernelParams = [
       "consoleblank=30"
