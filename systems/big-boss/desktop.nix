@@ -22,6 +22,8 @@
     };
   };
 
+  security.pam.services.greetd.enableGnomeKeyring = true;
+
   programs.hyprland = {
     enable = true;
     xwayland = { enable = true; };
