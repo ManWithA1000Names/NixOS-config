@@ -17,18 +17,18 @@ let
   QBIT_DOMAIN = "cloud-qbit.local";
 
   services = {
-    ${GIT_DOMAIN} = "8001";
-    ${MEALIE_DOMAIN} = "8002";
-    ${JELLYFIN_DOMAIN} = "8096";
-    ${PAPERLESS_DOMAIN} = "28981";
-    ${KAVITA_DOMAIN} = "5000";
+    ${GIT_DOMAIN} = 8001;
+    ${MEALIE_DOMAIN} = 8002;
+    ${JELLYFIN_DOMAIN} = 8096;
+    ${PAPERLESS_DOMAIN} = 28981;
+    ${KAVITA_DOMAIN} = 5000;
 
-    ${PROWLARR_DOMAIN} = "9696";
-    ${SONARR_DOMAIN} = "8989";
-    ${RADARR_DOMAIN} = "7878";
-    ${BAZARR_DOMAIN} = "6767";
-    ${SEERR_DOMAIN} = "5055";
-    ${QBIT_DOMAIN} = "8080";
+    ${PROWLARR_DOMAIN} = 9696;
+    ${SONARR_DOMAIN} = 8989;
+    ${RADARR_DOMAIN} = 7878;
+    ${BAZARR_DOMAIN} = 6767;
+    ${SEERR_DOMAIN} = 5055;
+    ${QBIT_DOMAIN} = 8080;
   };
 
   service_names = {
@@ -53,8 +53,8 @@ let
   MEDIA_ROOT = "/mnt/ex-ssd/media";
   MEDIA_GROUP = "media";
 
-  GITEA_DB_PORT = "9001";
-  HOMELAB_DASHBOARD_PORT = "8000";
+  GITEA_DB_PORT = 9001;
+  HOMELAB_DASHBOARD_PORT = 8000;
 
   # Helper to generate the avahi-publish commands
   publishCommands = builtins.concatStringsSep "\n"
@@ -102,7 +102,7 @@ in {
 
     homelab-dashboard = {
       enable = true;
-      port = pkgs.lib.toInt HOMELAB_DASHBOARD_PORT;
+      port = HOMELAB_DASHBOARD_PORT;
       title = "Local Cloud Control Center";
       services = builtins.mapAttrs (name: value: {
         url = "http://${name}";
@@ -115,10 +115,10 @@ in {
       lfs.enable = true;
       settings.server = {
         DOMAIN = GIT_DOMAIN;
-        HTTP_PORT = pkgs.lib.toInt services.${GIT_DOMAIN};
+        HTTP_PORT = services.${GIT_DOMAIN};
       };
 
-      database.port = pkgs.lib.toInt GITEA_DB_PORT;
+      database.port = GITEA_DB_PORT;
     };
 
     jellyfin = {
@@ -128,19 +128,19 @@ in {
 
     mealie = {
       enable = true;
-      port = pkgs.lib.toInt services.${MEALIE_DOMAIN};
+      port = services.${MEALIE_DOMAIN};
       settings = { BASE_URL = "http://${MEALIE_DOMAIN}"; };
     };
 
     paperless = {
       enable = true;
       domain = PAPERLESS_DOMAIN;
-      port = pkgs.lib.toInt services.${PAPERLESS_DOMAIN};
+      port = services.${PAPERLESS_DOMAIN};
     };
 
     kavita = {
       enable = true;
-      settings = { Port = pkgs.lib.toInt services.${KAVITA_DOMAIN}; };
+      settings = { Port = services.${KAVITA_DOMAIN}; };
       tokenKeyFile = "/var/lib/kavita/secrets/tokenkey";
     };
 
@@ -149,34 +149,34 @@ in {
     # Indexer manager. Syncs its indexers into Sonarr/Radarr automatically.
     prowlarr = {
       enable = true;
-      settings.server.port = pkgs.lib.toInt services.${PROWLARR_DOMAIN};
+      settings.server.port = services.${PROWLARR_DOMAIN};
     };
 
     # TV automation. Writes to the shared library, so it runs in "media".
     sonarr = {
       enable = true;
       group = MEDIA_GROUP;
-      settings.server.port = pkgs.lib.toInt services.${SONARR_DOMAIN};
+      settings.server.port = services.${SONARR_DOMAIN};
     };
 
     # Movie automation. Writes to the shared library, so it runs in "media".
     radarr = {
       enable = true;
       group = MEDIA_GROUP;
-      settings.server.port = pkgs.lib.toInt services.${RADARR_DOMAIN};
+      settings.server.port = services.${RADARR_DOMAIN};
     };
 
     # Subtitles. Writes subtitle files next to media, so it runs in "media".
     bazarr = {
       enable = true;
       group = MEDIA_GROUP;
-      listenPort = pkgs.lib.toInt services.${BAZARR_DOMAIN};
+      listenPort = services.${BAZARR_DOMAIN};
     };
 
     # Requests portal (formerly Jellyseerr). Talks to APIs only, no media.
     seerr = {
       enable = true;
-      port = pkgs.lib.toInt services.${SEERR_DOMAIN};
+      port = services.${SEERR_DOMAIN};
     };
 
     # Download client. Writes downloads to the shared root, so it runs in
@@ -184,7 +184,7 @@ in {
     qbittorrent = {
       enable = true;
       group = MEDIA_GROUP;
-      webuiPort = pkgs.lib.toInt services.${QBIT_DOMAIN};
+      webuiPort = services.${QBIT_DOMAIN};
     };
 
   };
