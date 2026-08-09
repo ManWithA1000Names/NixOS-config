@@ -23,6 +23,7 @@
   };
 
   security.pam.services.greetd.enableGnomeKeyring = true;
+  security.pam.services.hyprlock.enableGnomeKeyring = true;
 
   programs.hyprland = {
     enable = true;
