@@ -12,11 +12,7 @@
     kernelParams = [
       "nvidia_drm.modeset=1"
       "nvidia_drm.fbdev=1"
-      # Prevent ACPI NVS from being saved/restored, avoiding firmware state
-      # corruption left behind by Windows between boots.
-      "acpi_sleep=nonvs"
-      # Force ACPI for all power state transitions.
-      "reboot=acpi"
+      "reboot=force"
     ];
 
     extraModulePackages = [ ];
