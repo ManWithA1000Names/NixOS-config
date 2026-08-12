@@ -1,6 +1,8 @@
 { pkgs, ... }:
 let
 
+  VAULTWARDEN_DOMAIN = "cloud-vault.local";
+
   GIT_DOMAIN = "cloud-git.local";
   MEALIE_DOMAIN = "cloud-mealie.local";
   JELLYFIN_DOMAIN = "cloud-fin.local";
@@ -29,6 +31,7 @@ let
     ${BAZARR_DOMAIN} = "6767";
     ${SEERR_DOMAIN} = "5055";
     ${QBIT_DOMAIN} = "8080";
+    ${VAULTWARDEN_DOMAIN} = "9999";
   };
 
   service_names = {
@@ -44,6 +47,7 @@ let
     ${BAZARR_DOMAIN} = "Bazarr";
     ${SEERR_DOMAIN} = "Seerr";
     ${QBIT_DOMAIN} = "qBittorrent";
+    ${VAULTWARDEN_DOMAIN} = "Vaultwarden";
   };
 
   # Shared media storage for the Arr stack, qBittorrent and Jellyfin.
@@ -99,6 +103,13 @@ in {
             extraConfig = "reverse_proxy localhost:${HOMELAB_DASHBOARD_PORT}";
           };
         };
+    };
+
+    vaultwarden = {
+      enable = true;
+      backupDir = "/mnt/ex-ssd/backup/warden/";
+      config = { ROCKET_PORT = pkgs.lib.toInt services.${VAULTWARDEN_DOMAIN}; };
+      domain = VAULTWARDEN_DOMAIN;
     };
 
     homelab-dashboard = {
