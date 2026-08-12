@@ -53,6 +53,22 @@ let
   MEDIA_ROOT = "/mnt/ex-ssd/media";
   MEDIA_GROUP = "media";
 
+  # --- DNS ---------------------------------------------------------------
+  #
+  # This host's LAN address. Hardcoded rather than discovered because dnsmasq
+  # must both bind it and hand it out as an answer, and a moving address would
+  # silently serve stale records. Pin it with a static DHCP reservation on the
+  # router for this machine's MAC.
+  CLOUD_IP = "192.168.1.108";
+  ROUTER_IP = "192.168.1.1";
+
+  # RFC 8375 reserves home.arpa for exactly this: a real, unicast-resolvable
+  # zone for home networks that can never collide with a public name. Used
+  # here to prove out LAN-wide name resolution without registering a domain.
+  # It can never carry a public TLS certificate (nobody can prove ownership),
+  # so it is a testing vehicle only.
+  LAN_ZONE = "home.arpa";
+
   GITEA_DB_PORT = "9001";
   HOMELAB_DASHBOARD_PORT = "8000";
 
@@ -67,6 +83,48 @@ in {
     # avahi-daemon D-Bus API. That API is rejected with "Not permitted"
     # unless user-triggered publishing is allowed.
     avahi.publish.userServices = pkgs.lib.mkForce true;
+
+    # LAN resolver. Answers authoritatively for LAN_ZONE and forwards
+    # everything else to the router.
+    dnsmasq = {
+      enable = true;
+
+      # Leave this host's own resolution alone: systemd-resolved keeps
+      # /etc/resolv.conf pointed at its loopback stub. Setting this true would
+      # have resolvconf fight resolved over the same file.
+      resolveLocalQueries = false;
+
+      settings = {
+        # Bind one explicit address rather than the interface. enp4s0 also
+        # carries globally routable IPv6 addresses and this host runs with
+        # networking.firewall.enable = false, so binding the interface would
+        # expose an open resolver to the internet -- reliably discovered and
+        # abused for DNS amplification. bind-dynamic (rather than
+        # bind-interfaces) tolerates the address not existing yet at boot,
+        # since it arrives via DHCP.
+        listen-address = CLOUD_IP;
+        bind-dynamic = true;
+
+        # Wildcard: every name under the zone resolves to this host, matching
+        # how a wildcard TLS certificate will later cover the same names.
+        # Adding a service then needs no DNS change at all.
+        address = [ "/${LAN_ZONE}/${CLOUD_IP}" ];
+
+        # Upstream is the router, deliberately: the query stays on the LAN, so
+        # it survives any future firewall rule that blocks outbound port 53.
+        no-resolv = true;
+        server = [ ROUTER_IP ];
+
+        cache-size = 1000;
+        domain-needed = true;
+        bogus-priv = true;
+
+        # Temporary, for the rollout test: records which client asked for
+        # what, so bypassing devices can be identified from evidence rather
+        # than guessed at. Remove once the DNS path is confirmed working.
+        log-queries = true;
+      };
+    };
 
     caddy = {
       enable = true;
