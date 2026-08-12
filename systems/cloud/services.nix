@@ -106,7 +106,7 @@ in {
       port = pkgs.lib.toInt HOMELAB_DASHBOARD_PORT;
       title = "Local Cloud Control Center";
       services = builtins.mapAttrs (name: value: {
-        url = "http://${name}";
+        url = "https://${name}";
         name = service_names.${name};
       }) services;
     };
