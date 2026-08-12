@@ -108,7 +108,13 @@ in {
         # Wildcard: every name under the zone resolves to this host, matching
         # how a wildcard TLS certificate will later cover the same names.
         # Adding a service then needs no DNS change at all.
-        address = [ "/${LAN_ZONE}/${CLOUD_IP}" ];
+        address = [
+          "/${LAN_ZONE}/${CLOUD_IP}"
+          # Returning NXDOMAIN for this name is the signal Firefox uses to
+          # disable DNS-over-HTTPS on "canary" networks. Without it, Firefox
+          # bypasses dnsmasq entirely regardless of DHCP settings.
+          "/use-application-dns.net/"
+        ];
 
         # Upstream is the router, deliberately: the query stays on the LAN, so
         # it survives any future firewall rule that blocks outbound port 53.
