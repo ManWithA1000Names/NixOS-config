@@ -25,7 +25,7 @@ in (import ./arr-media-stack-tweaks.nix) // (
   # Assert that all service ports are unique.
   #
   assert builtins.foldl' (ports: service:
-    assert !builtins.hasAttr "${builtins.toString service.PORT}" ports;
+    assert !builtins.hasAttr (builtins.toString service.PORT) ports;
     {
       ${builtins.toString service.PORT} = true;
     } // ports) { } all_services;

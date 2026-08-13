@@ -1,7 +1,7 @@
 rec {
   NAME = "Kavita";
   SUB-DOMAIN = "kavita";
-  PORT = 28981;
+  PORT = 5000;
 
   SERVICE = "kavita";
 
