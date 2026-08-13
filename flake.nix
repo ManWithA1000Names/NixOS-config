@@ -14,10 +14,8 @@
 
         modules = [
           ./systems/common/nix.nix
-          ./systems/common/services.nix
           ./systems/common/programs.nix
           ./systems/common/virtualisation.nix
-          ./systems/common/security.nix
 
           ./systems/big-boss/user.nix
           ./systems/big-boss/desktop.nix
@@ -62,9 +60,7 @@
 
           ./systems/common/nix.nix
           ./systems/common/programs.nix
-          ./systems/common/services.nix
           ./systems/common/virtualisation.nix
-          ./systems/common/security.nix
 
           ./systems/cloud/user.nix
           ./systems/cloud/services.nix
