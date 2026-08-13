@@ -51,27 +51,31 @@
     };
   };
 
-  # The external SSD is shared by Jellyfin, the media stack and the NFS
-  # export. Its mount-point must be root-owned, otherwise
-  # systemd-tmpfiles refuses to create anything beneath it ("unsafe path
-  # transition") whenever a regular user owns the mount-point. It stays
-  # group-writable by "media" so the human user can still manage the drive.
-  systemd.tmpfiles.rules = [ "d /mnt/ex-ssd 2775 root media - -" ];
-
-  systemd.settings.Manager.RebootWatchdogSec = "0";
-
   swapDevices = [ ];
 
-  systemd.network.networks."10-ethernet" = {
-    matchConfig.Type = "ether";
-    networkConfig.DHCP = "ipv4";
-    dhcpV4Config.RequestAddress = "192.168.1.108";
+  systemd = {
+    # The external SSD is shared by Jellyfin, the media stack and the NFS
+    # export. Its mount-point must be root-owned, otherwise
+    # systemd-tmpfiles refuses to create anything beneath it ("unsafe path
+    # transition") whenever a regular user owns the mount-point. It stays
+    # group-writable by "media" so the human user can still manage the drive.
+    tmpfiles.rules = [ "d /mnt/ex-ssd 2775 root media - -" ];
+
+    settings.Manager.RebootWatchdogSec = "0";
+
+    network.networks."10-ethernet" = {
+      matchConfig.Type = "ether";
+      networkConfig.DHCP = "ipv4";
+      dhcpV4Config.RequestAddress = "192.168.1.108";
+    };
   };
 
-  nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
+  nixpkgs = {
+    hostPlatform = lib.mkDefault "x86_64-linux";
 
-  nixpkgs.config.problems.handlers.nvidia-x11.broken = "ignore";
-  nixpkgs.config.problems.handlers.nvidia-kernel-modules.broken = "ignore";
+    config.problems.handlers.nvidia-x11.broken = "ignore";
+    config.problems.handlers.nvidia-kernel-modules.broken = "ignore";
+  };
 
   # Load the NVIDIA modules early so that udev rules (which create
   # /dev/nvidia*, /dev/nvidia-uvm, etc.) fire before any service starts.

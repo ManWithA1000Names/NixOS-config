@@ -1,4 +1,4 @@
-{ pkgs, ... }: {
+{ pkgs, MEDIA_GROUP, ... }: {
   users.users.user = {
     isNormalUser = true;
     # Pinned so the NFS export (hardware-configuration.nix) can squash every
@@ -19,7 +19,7 @@
       "libvirtd"
       "docker"
       # Read/write access to the shared media library at /mnt/ex-ssd/media.
-      "media"
+      MEDIA_GROUP
     ];
 
     shell = pkgs.fish;
