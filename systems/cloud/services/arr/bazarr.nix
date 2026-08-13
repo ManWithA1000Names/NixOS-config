@@ -8,6 +8,6 @@ rec {
   config = { MEDIA_GROUP, ... }: {
     enable = true;
     group = MEDIA_GROUP;
-    settings.server.port = PORT;
+    listenPort = PORT;
   };
 }

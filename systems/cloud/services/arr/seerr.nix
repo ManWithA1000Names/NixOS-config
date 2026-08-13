@@ -7,6 +7,6 @@ rec {
 
   config = _: {
     enable = true;
-    settings.server.port = PORT;
+    port = PORT;
   };
 }
