@@ -67,8 +67,8 @@ in (import ./arr-media-stack-tweaks.nix args) // (
         title = "Local Cloud Control Center";
         services = builtins.foldl' (services: service:
           {
-            ${services.SUB-DOMAIN} = {
-              url = "https://${toDomain services.SUB-DOMAIN}";
+            ${service.SUB-DOMAIN} = {
+              url = "https://${toDomain service.SUB-DOMAIN}";
               name = service.NAME;
             };
           } // services) { } all_services;
