@@ -1,4 +1,4 @@
-{ pkgs, MEDIA_GROUP, DOMAIN, ... }:
+{ pkgs, MEDIA_GROUP, DOMAIN, ... }@args:
 let
   HOMELAB_DASHBOARD_PORT = 8000;
   toDomain = sub: "${sub}.${DOMAIN}";
@@ -20,7 +20,7 @@ let
     (import ./services/arr/seerr.nix)
     (import ./services/arr/sonarr.nix)
   ];
-in (import ./arr-media-stack-tweaks.nix) // (
+in (import ./arr-media-stack-tweaks.nix args) // (
   #
   # Assert that all service ports are unique.
   #
