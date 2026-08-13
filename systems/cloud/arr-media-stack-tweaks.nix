@@ -27,7 +27,7 @@ in {
   # rules to apply -- systemd-tmpfiles refuses an "unsafe path transition"
   # from an unprivileged-user-owned directory into a root-owned one. That
   # ownership is asserted next to the mount in hardware-configuration.nix.
-  tmpfiles.rules = [
+  systemd.tmpfiles.rules = [
     "d ${MEDIA_ROOT}                     2775 root        ${MEDIA_GROUP} - -"
     "d ${MEDIA_ROOT}/torrents            2775 qbittorrent ${MEDIA_GROUP} - -"
     "d ${MEDIA_ROOT}/torrents/incomplete 2775 qbittorrent ${MEDIA_GROUP} - -"
