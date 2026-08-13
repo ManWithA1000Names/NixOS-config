@@ -1,10 +1,11 @@
-{ MEDIA_GROUP, ... }: rec {
+{ MEDIA_GROUP, ... }:
+let
   # Shared media storage for the Arr stack, qBittorrent and Jellyfin.
   # Downloads and the final library live under a single root on the same
   # filesystem so Sonarr/Radarr can import via instant hardlinks + atomic
   # moves (no copy, no extra disk usage, seeding keeps working).
   MEDIA_ROOT = "/mnt/ex-ssd/media";
-  # MEDIA_GROUP = "media";
+in {
 
   # Shared group that owns everything under MEDIA_ROOT. Every service that
   # touches media files runs with this as its primary group (set above),
