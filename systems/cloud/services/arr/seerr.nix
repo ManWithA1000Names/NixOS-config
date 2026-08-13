@@ -1,9 +1,9 @@
 rec {
   NAME = "Seerr";
-  SUB-DOMAIN = "serr";
+  SUB-DOMAIN = "seerr";
   PORT = 5055;
 
-  SERVICE = "serr";
+  SERVICE = "seerr";
 
   config = _: {
     enable = true;
