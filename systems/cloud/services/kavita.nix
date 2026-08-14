@@ -9,6 +9,6 @@ rec {
     enable = true;
 
     settings.Port = PORT;
-    tokenKeyFile = "/var/lib/kavita/secrets/tokenKey";
+    tokenKeyFile = "/var/lib/kavita/secrets/tokenkey";
   };
 }
