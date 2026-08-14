@@ -59,7 +59,7 @@
       };
     in [
       (commonMountOptions // {
-        what = "${o700-IP}:/export-ssd";
+        what = "${o700-IP}:/mnt/ex-ssd/";
         where = "/mnt/ex-ssd/";
       })
     ];
