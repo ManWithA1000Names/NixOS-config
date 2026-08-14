@@ -88,7 +88,7 @@ in (import ./arr-media-stack-tweaks.nix args) // (
       homelab-dashboard = {
         enable = true;
         port = HOMELAB_DASHBOARD_PORT;
-        title = "Local Cloud Control Center";
+        title = "o700 Control Center";
         services = builtins.foldl' (services: service:
           {
             ${service.SUB-DOMAIN} = {

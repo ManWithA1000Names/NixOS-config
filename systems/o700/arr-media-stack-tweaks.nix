@@ -9,7 +9,7 @@ in {
 
   # Shared group that owns everything under MEDIA_ROOT. Every service that
   # touches media files runs with this as its primary group (set above),
-  # and the human user is a member too (see cloud/user.nix).
+  # and the human user is a member too (see o700/user.nix).
   #
   # The GID is pinned to a fixed, known value because the NFS export squashes
   # every client onto this group (see hardware-configuration.nix). A stable

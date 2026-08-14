@@ -1,4 +1,4 @@
-{ config, lib, modulesPath, pkgs, ... }: {
+{ config, lib, o700-IP, modulesPath, pkgs, ... }: {
   imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
 
   boot = {
@@ -33,18 +33,6 @@
       fsType = "vfat";
     };
 
-    "/export" = {
-      device = "/home/user";
-      fsType = "none";
-      options = [ "bind" ];
-    };
-
-    "/export-ssd" = {
-      device = "/mnt/ex-ssd";
-      fsType = "none";
-      options = [ "bind" ];
-    };
-
     "/mnt/ex-ssd" = {
       device = "/dev/disk/by-uuid/b7df9669-1d68-44c6-988d-a410ba030953";
       fsType = "ext4";
@@ -66,7 +54,8 @@
     network.networks."10-ethernet" = {
       matchConfig.Type = "ether";
       networkConfig.DHCP = "ipv4";
-      dhcpV4Config.RequestAddress = "192.168.1.108";
+      networkConfig.MulticastDNS = true;
+      dhcpV4Config.RequestAddress = o700-IP;
     };
   };
 
@@ -101,11 +90,16 @@
     };
   };
 
-  # Activates hardware.nvidia (udev rules, kernel modules, driver libraries)
-  # without starting X. services.xserver.enable remains false (default).
-  services.xserver.videoDrivers = [ "nvidia" ];
-
   services = {
+    # Activates hardware.nvidia (udev rules, kernel modules, driver libraries)
+    # without starting X. services.xserver.enable remains false (default).
+    xserver.videoDrivers = [ "nvidia" ];
+
+    resolved = {
+      enable = true;
+      settings.Resolve.MulticastDNS = "yes";
+    };
+
     logind.settings.Login = {
       HandleLidSwitch = "ignore";
       HandleLidSwitchDocked = "ignore";
@@ -119,8 +113,7 @@
       # group owns the Arr-stack tree, so every client gets full read/write
       # access without needing a matching UID/GID configured on its end.
       exports = ''
-        /export 192.168.1.0/24(rw,sync,no_subtree_check)
-        /export-ssd 192.168.1.0/24(rw,sync,no_subtree_check,all_squash,anonuid=${
+        /mnt/ex-ssd 192.168.1.0/24(rw,sync,no_subtree_check,all_squash,anonuid=${
           toString config.users.users.user.uid
         },anongid=${toString config.users.groups.media.gid})
       '';

@@ -1,19 +1,17 @@
-{ config, lib, pkgs, modulesPath, ... }: {
+{ config, lib, pkgs, modulesPath, o700-IP, ... }: {
   imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
 
   boot = {
     initrd.availableKernelModules =
       [ "xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod" ];
 
-    initrd.kernelModules = [];
+    initrd.kernelModules = [ ];
 
-    kernelModules = [ "kvm-intel" "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm"  ];
+    kernelModules =
+      [ "kvm-intel" "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
 
-    kernelParams = [
-      "nvidia_drm.modeset=1"
-      "nvidia_drm.fbdev=1"
-      "reboot=force"
-    ];
+    kernelParams =
+      [ "nvidia_drm.modeset=1" "nvidia_drm.fbdev=1" "reboot=force" ];
 
     extraModulePackages = [ ];
 
@@ -61,12 +59,8 @@
       };
     in [
       (commonMountOptions // {
-        what = "cloud.local:/export-ssd";
+        what = "${o700-IP}:/export-ssd";
         where = "/mnt/ex-ssd/";
-      })
-      (commonMountOptions // {
-        what = "cloud.local:/export";
-        where = "/mnt/cloud-local/";
       })
     ];
 
@@ -75,10 +69,7 @@
         wantedBy = [ "multi-user.target" ];
         automountConfig = { TimeoutIdleSec = "600"; };
       };
-    in [
-      (commonAutoMountOptions // { where = "/mnt/ex-ssd"; })
-      (commonAutoMountOptions // { where = "/mnt/cloud-local"; })
-    ];
+    in [ (commonAutoMountOptions // { where = "/mnt/ex-ssd"; }) ];
   };
 
   swapDevices = [{

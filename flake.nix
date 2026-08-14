@@ -8,10 +8,14 @@
   };
 
   outputs = { nixpkgs, homelab-dashboard, agenix, ... }:
-    let system = "x86_64-linux";
+    let
+      system = "x86_64-linux";
+      o700-IP = "192.168.1.108";
     in {
       nixosConfigurations.big-boss = nixpkgs.lib.nixosSystem {
         inherit system;
+
+        specialArgs = { inherit o700-IP; };
 
         modules = [
           ./systems/common/nix.nix
@@ -48,10 +52,11 @@
         ];
       };
 
-      nixosConfigurations.cloud = nixpkgs.lib.nixosSystem {
+      nixosConfigurations.o700 = nixpkgs.lib.nixosSystem {
         inherit system;
 
         specialArgs = {
+          inherit o700-IP;
           DOMAIN = "o700.net";
           MEDIA_GROUP = "media";
         };
@@ -64,9 +69,9 @@
           ./systems/common/programs.nix
           ./systems/common/virtualisation.nix
 
-          ./systems/cloud/user.nix
-          ./systems/cloud/services.nix
-          ./systems/cloud/hardware-configuration.nix
+          ./systems/o700/user.nix
+          ./systems/o700/services.nix
+          ./systems/o700/hardware-configuration.nix
 
           ({ lib, ... }: {
             time.timeZone = "Europe/Athens";
@@ -84,7 +89,7 @@
             };
 
             networking = {
-              hostName = "cloud";
+              hostName = "o700";
               firewall.enable = false;
               useNetworkd = true;
             };
