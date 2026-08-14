@@ -1,4 +1,4 @@
-{ config, lib, pkgs, MEDIA_GROUP, DOMAIN, ... }@args:
+{ config, pkgs, MEDIA_GROUP, DOMAIN, ... }@args:
 let
   HOMELAB_DASHBOARD_PORT = 8000;
   toDomain = sub: "${sub}.${DOMAIN}";
@@ -51,8 +51,7 @@ in (import ./arr-media-stack-tweaks.nix args) // (
         # challenge below is unusable without this plugin.
         package = pkgs.caddy.withPlugins {
           plugins = [ "github.com/caddy-dns/cloudflare@v0.2.4" ];
-          # TODO: replace with the hash reported by the first build.
-          hash = lib.fakeHash;
+          hash = "sha256-7GoH8YLCoPmPExQxoga2FHB58zQDoZVf1BBwkVi0SsQ=";
         };
 
         # Read by systemd before the caddy process starts. Must define
