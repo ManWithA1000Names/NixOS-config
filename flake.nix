@@ -4,9 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     homelab-dashboard.url = "github:ManWithA1000Names/dashboard";
+    agenix.url = "github:ryantm/agenix";
   };
 
-  outputs = { nixpkgs, homelab-dashboard, ... }:
+  outputs = { nixpkgs, homelab-dashboard, agenix, ... }:
     let system = "x86_64-linux";
     in {
       nixosConfigurations.big-boss = nixpkgs.lib.nixosSystem {
@@ -56,6 +57,7 @@
         };
 
         modules = [
+          agenix.nixosModules.default
           homelab-dashboard.nixosModules.default
 
           ./systems/common/nix.nix
@@ -75,6 +77,12 @@
 
             security.rtkit.enable = true;
 
+            age.secrets.cloudflare-dns-api = {
+              file = ./secrets/cloudflare-dns-api.age;
+              owner = "caddy";
+              group = "caddy";
+            };
+
             networking = {
               hostName = "cloud";
               firewall.enable = false;
@@ -91,6 +99,13 @@
 
       devShells.${system}.default =
         let pkgs = import nixpkgs { inherit system; };
-        in pkgs.mkShell { buildInputs = with pkgs; [ nixpkgs-fmt nil nixd ]; };
+        in pkgs.mkShell {
+          buildInputs = with pkgs; [
+            nixpkgs-fmt
+            nil
+            nixd
+            agenix.packages.${system}.agenix
+          ];
+        };
     };
 }

@@ -7,9 +7,8 @@
     uid = 1000;
     description = "The human user";
 
-    openssh.authorizedKeys.keys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKvGywW2M93I8qbcmQanE9GAEggfUGiwLCP3fAPip6mV user@big-boss"
-    ];
+    openssh.authorizedKeys.keys =
+      [ (builtins.readFile ../../public-keys/id_ed25519.pub) ];
 
     extraGroups = [
       "networkmanager"

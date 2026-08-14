@@ -1,4 +1,4 @@
-{ pkgs, MEDIA_GROUP, DOMAIN, ... }@args:
+{ config, lib, pkgs, MEDIA_GROUP, DOMAIN, ... }@args:
 let
   HOMELAB_DASHBOARD_PORT = 8000;
   toDomain = sub: "${sub}.${DOMAIN}";
@@ -47,6 +47,25 @@ in (import ./arr-media-stack-tweaks.nix args) // (
       caddy = {
         enable = true;
 
+        # Stock caddy has no DNS provider modules compiled in; the ACME DNS-01
+        # challenge below is unusable without this plugin.
+        package = pkgs.caddy.withPlugins {
+          plugins = [ "github.com/caddy-dns/cloudflare@v0.2.4" ];
+          # TODO: replace with the hash reported by the first build.
+          hash = lib.fakeHash;
+        };
+
+        # Read by systemd before the caddy process starts. Must define
+        # CF_API_TOKEN (single Cloudflare token: Zone.Zone:Read + Zone.DNS:Edit).
+        environmentFile = config.age.secrets.cloudflare-dns-api.path;
+
+        # DNS-01 rather than HTTP-01 because the wildcard below cannot be
+        # validated any other way.
+        globalConfig = ''
+          acme_dns cloudflare {env.CF_API_TOKEN}
+          tls_resolvers 1.1.1.1
+        '';
+
         virtualHosts = (builtins.foldl' (hosts: service:
           {
             ${toDomain service.SUB-DOMAIN}.extraConfig =
@@ -58,6 +77,12 @@ in (import ./arr-media-stack-tweaks.nix args) // (
             ${DOMAIN}.extraConfig = "reverse_proxy localhost:${
                 builtins.toString HOMELAB_DASHBOARD_PORT
               }";
+
+            # Exists purely so caddy manages a wildcard cert. Caddy skips
+            # per-name certs for any subject a managed wildcard covers, so all
+            # service hosts above share this one cert. Exact hosts still win
+            # at routing time; this only catches subdomains with no service.
+            "*.${DOMAIN}".extraConfig = "respond 404";
           };
       };
 
