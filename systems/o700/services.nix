@@ -1,4 +1,4 @@
-{ config, pkgs, o700-IP, MEDIA_GROUP, DOMAIN, ... }@args:
+{ config, pkgs, lib, o700-IP, MEDIA_GROUP, DOMAIN, ... }@args:
 let
   ROUTER_IP = "192.168.1.1";
   HOMELAB_DASHBOARD_PORT = 8000;
@@ -174,6 +174,7 @@ in (import ./arr-media-stack-tweaks.nix args) // (
         ${service.SERVICE} = service.config config_args;
       } // configs) { } all_services);
 
-    systemd.services.homepage-dashboard.environment.HOMEPAGE_ALLOWED_HOSTS = DOMAIN;
+    systemd.services.homepage-dashboard.environment.HOMEPAGE_ALLOWED_HOSTS = lib.mkForce
+      "${DOMAIN},localhost:${builtins.toString HOMELAB_DASHBOARD_PORT},127.0.0.1:${builtins.toString HOMELAB_DASHBOARD_PORT}";
 
   })
