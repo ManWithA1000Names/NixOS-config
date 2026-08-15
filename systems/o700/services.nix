@@ -177,4 +177,18 @@ in (import ./arr-media-stack-tweaks.nix args) // (
     systemd.services.homepage-dashboard.environment.HOMEPAGE_ALLOWED_HOSTS = lib.mkForce
       "${DOMAIN},localhost:${builtins.toString HOMELAB_DASHBOARD_PORT},127.0.0.1:${builtins.toString HOMELAB_DASHBOARD_PORT}";
 
+    # Mealie's ExecStartPre (init_db) imports the whole application -- fastapi,
+    # sqlalchemy, alembic, the scraper stack -- before it opens the SQLite file.
+    # That is thousands of small reads with nothing external to block on, so its
+    # runtime is bound entirely by page-cache state. Started by hand it takes
+    # ~15s off a warm cache; during boot it contends with every other unit here
+    # for a cold one and overruns systemd's 90s DefaultTimeoutStartSec, which
+    # kills start-pre and fails the unit. Give it headroom, and retry instead of
+    # staying dead until somebody notices.
+    systemd.services.mealie.serviceConfig = {
+      TimeoutStartSec = "10min";
+      Restart = "on-failure";
+      RestartSec = "15s";
+    };
+
   })
