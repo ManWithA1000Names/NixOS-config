@@ -174,4 +174,6 @@ in (import ./arr-media-stack-tweaks.nix args) // (
         ${service.SERVICE} = service.config config_args;
       } // configs) { } all_services);
 
+    systemd.services.homepage-dashboard.environment.HOMEPAGE_ALLOWED_HOSTS = DOMAIN;
+
   })
