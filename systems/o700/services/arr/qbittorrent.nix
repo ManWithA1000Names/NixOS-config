@@ -2,6 +2,9 @@ rec {
   NAME = "qBittorrent";
   SUB-DOMAIN = "qbit";
   PORT = 8080;
+  GROUP = "Downloads";
+  DESCRIPTION = "Torrent client";
+  ICON = "qbittorrent.png";
 
   SERVICE = "qbittorrent";
 

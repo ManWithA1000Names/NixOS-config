@@ -2,6 +2,9 @@ rec {
   NAME = "Prowlarr";
   SUB-DOMAIN = "prowlarr";
   PORT = 9696;
+  GROUP = "Downloads";
+  DESCRIPTION = "Indexers";
+  ICON = "prowlarr.png";
 
   SERVICE = "prowlarr";
 

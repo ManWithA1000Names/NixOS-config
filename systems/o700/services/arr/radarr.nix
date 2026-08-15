@@ -2,6 +2,9 @@ rec {
   NAME = "Radarr";
   SUB-DOMAIN = "radarr";
   PORT = 7878;
+  GROUP = "Downloads";
+  DESCRIPTION = "Movies";
+  ICON = "radarr.png";
 
   SERVICE = "radarr";
 

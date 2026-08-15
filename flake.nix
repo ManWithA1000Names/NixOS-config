@@ -3,11 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
-    homelab-dashboard.url = "github:ManWithA1000Names/dashboard";
     agenix.url = "github:ryantm/agenix";
   };
 
-  outputs = { nixpkgs, homelab-dashboard, agenix, ... }:
+  outputs = { nixpkgs, agenix, ... }:
     let
       system = "x86_64-linux";
       o700-IP = "192.168.1.108";
@@ -63,7 +62,6 @@
 
         modules = [
           agenix.nixosModules.default
-          homelab-dashboard.nixosModules.default
 
           ./systems/common/nix.nix
           ./systems/common/programs.nix

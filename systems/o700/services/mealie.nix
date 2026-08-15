@@ -2,6 +2,9 @@ rec {
   NAME = "Mealie";
   SUB-DOMAIN = "mealie";
   PORT = 8002;
+  GROUP = "Apps";
+  DESCRIPTION = "Recipes";
+  ICON = "mealie.png";
 
   SERVICE = "mealie";
 

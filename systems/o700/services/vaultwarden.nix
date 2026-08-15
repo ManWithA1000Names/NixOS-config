@@ -2,6 +2,9 @@ rec {
   NAME = "Vaultwarden";
   SUB-DOMAIN = "vault";
   PORT = 9999;
+  GROUP = "Apps";
+  DESCRIPTION = "Password manager";
+  ICON = "vaultwarden.png";
 
   SERVICE = "vaultwarden";
 

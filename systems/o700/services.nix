@@ -86,17 +86,41 @@ in (import ./arr-media-stack-tweaks.nix args) // (
           };
       };
 
-      homelab-dashboard = {
+      homepage-dashboard = {
         enable = true;
-        port = HOMELAB_DASHBOARD_PORT;
-        title = "o700 Control Center";
-        services = builtins.foldl' (services: service:
+        listenPort = HOMELAB_DASHBOARD_PORT;
+
+        settings.title = "o700";
+
+        widgets = [
           {
-            ${service.SUB-DOMAIN} = {
-              url = "https://${toDomain service.SUB-DOMAIN}";
-              name = service.NAME;
+            resources = {
+              cpu = true;
+              memory = true;
+              disk = "/mnt/ex-ssd";
             };
-          } // services) { } all_services;
+          }
+          {
+            search = {
+              provider = "duckduckgo";
+              target = "_blank";
+            };
+          }
+        ];
+
+        services =
+          let
+            grouped = builtins.groupBy (s: s.GROUP) all_services;
+          in
+            builtins.attrValues (builtins.mapAttrs (group: svcs: {
+              ${group} = map (s: {
+                ${s.NAME} = {
+                  href = "https://${toDomain s.SUB-DOMAIN}";
+                  icon = s.ICON;
+                  description = s.DESCRIPTION;
+                };
+              }) svcs;
+            }) grouped);
       };
 
       dnsmasq = {

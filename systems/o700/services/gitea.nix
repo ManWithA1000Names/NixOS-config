@@ -1,8 +1,11 @@
 rec {
-  NAME = "Gitea"; 
+  NAME = "Gitea";
   SUB-DOMAIN = "git";
   PORT = 8001;
   DB-PORT = 9001;
+  GROUP = "Apps";
+  DESCRIPTION = "Git hosting";
+  ICON = "gitea.png";
 
   SERVICE = "gitea";
 

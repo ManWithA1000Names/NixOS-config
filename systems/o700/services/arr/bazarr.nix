@@ -2,6 +2,9 @@ rec {
   NAME = "Bazarr";
   SUB-DOMAIN = "bazarr";
   PORT = 6767;
+  GROUP = "Downloads";
+  DESCRIPTION = "Subtitles";
+  ICON = "bazarr.png";
 
   SERVICE = "bazarr";
 
