@@ -33,9 +33,15 @@
       fsType = "vfat";
     };
 
+    # The external SSD is removable, so the mount must be optional. Without
+    # "nofail" a missing drive fails local-fs.target and drops the machine
+    # into rescue mode, where sshd never starts -- unrecoverable remotely.
+    # The device timeout caps systemd's default 90s wait for a device that
+    # isn't coming back.
     "/mnt/ex-ssd" = {
       device = "/dev/disk/by-uuid/b7df9669-1d68-44c6-988d-a410ba030953";
       fsType = "ext4";
+      options = [ "nofail" "x-systemd.device-timeout=10s" ];
     };
   };
 
@@ -50,6 +56,28 @@
     tmpfiles.rules = [ "d /mnt/ex-ssd 2775 root media - -" ];
 
     settings.Manager.RebootWatchdogSec = "0";
+
+    # "nofail" keeps the machine booting, but every consumer of the SSD must
+    # then refuse to start when the drive is absent -- otherwise they run
+    # against the bare mount-point on the root filesystem. Jellyfin would
+    # re-import an empty library and orphan all watch history, the Arr stack
+    # would see its entire library as deleted, and the Vaultwarden backups
+    # would silently fill the root disk. Not starting is the graceful outcome.
+    #
+    # RequiresMountsFor pulls in the .mount unit and orders after it, so these
+    # fail within the device timeout rather than hanging.
+    services = lib.genAttrs [
+      "jellyfin"
+      "sonarr"
+      "radarr"
+      "bazarr"
+      "qbittorrent"
+      "backup-vaultwarden"
+      # There is exactly one export and it lives on the SSD. Refusing to start
+      # beats exporting the empty mount-point: clients get a connection
+      # refused immediately instead of mounting a plausible-looking empty tree.
+      "nfs-server"
+    ] (_: { unitConfig.RequiresMountsFor = "/mnt/ex-ssd"; });
 
     network.networks."10-ethernet" = {
       matchConfig.Type = "ether";
@@ -112,8 +140,14 @@
       # and "media" group. That account owns the existing data and the media
       # group owns the Arr-stack tree, so every client gets full read/write
       # access without needing a matching UID/GID configured on its end.
+      #
+      # "mountpoint" makes exportfs skip the entry unless /mnt/ex-ssd is an
+      # actual mount. It is the second half of the removable-drive handling:
+      # if the SSD is ever unmounted while nfs-server is already up, clients
+      # get an access error instead of silently reading an empty directory
+      # and concluding the library was deleted.
       exports = ''
-        /mnt/ex-ssd 192.168.1.0/24(rw,sync,no_subtree_check,all_squash,anonuid=${
+        /mnt/ex-ssd 192.168.1.0/24(rw,sync,no_subtree_check,mountpoint,all_squash,anonuid=${
           toString config.users.users.user.uid
         },anongid=${toString config.users.groups.media.gid})
       '';

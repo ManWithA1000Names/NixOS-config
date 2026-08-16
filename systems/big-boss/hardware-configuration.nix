@@ -18,12 +18,7 @@
     supportedFilesystems = [ "nfs" "ntfs" ];
 
     loader = {
-      systemd-boot = {
-        enable = true;
-        # With NVIDIA modules in the initrd each generation is ~225MB.
-        # A 511MB /boot can only safely hold 2 generations.
-        configurationLimit = 2;
-      };
+      systemd-boot = { enable = true; };
       efi.canTouchEfiVariables = true;
     };
   };
@@ -55,7 +50,23 @@
     mounts = let
       commonMountOptions = {
         type = "nfs";
-        mountConfig = { Options = "noatime"; };
+        mountConfig = {
+          # The share is optional: o700 may be down, or its external SSD
+          # unplugged. Both cases must fail fast rather than block.
+          #
+          #   retry=0  mount.nfs otherwise keeps retrying in the background
+          #            for two minutes before giving up, which is what stalls
+          #            the first access to an unreachable server.
+          #   soft     bounds runtime I/O too: if the server disappears after
+          #            mounting, callers get EIO instead of parking in
+          #            uninterruptible sleep forever. Safe here because this
+          #            is a read-mostly media share, not a database.
+          #   timeo    deciseconds, so 5s per RPC attempt, 2 retries.
+          Options = "noatime,soft,retry=0,timeo=50,retrans=2";
+          # Caps the whole mount attempt, including a server that accepts the
+          # connection but then never answers.
+          TimeoutSec = "10s";
+        };
       };
     in [
       (commonMountOptions // {
