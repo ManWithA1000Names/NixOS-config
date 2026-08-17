@@ -2,6 +2,10 @@
 let
   ROUTER_IP = "192.168.1.1";
   HOMELAB_DASHBOARD_PORT = 8000;
+
+  # Not 5353: systemd-resolved already holds 0.0.0.0:5353 for mDNS, and a
+  # 127.0.0.1:5353 bind underneath that wildcard bind fails.
+  DOH_PROXY_PORT = 5335;
   toDomain = sub: "${sub}.${DOMAIN}";
   config_args = { inherit toDomain MEDIA_GROUP; };
 
@@ -108,19 +112,16 @@ in (import ./arr-media-stack-tweaks.nix args) // (
           }
         ];
 
-        services =
-          let
-            grouped = builtins.groupBy (s: s.GROUP) all_services;
-          in
-            builtins.attrValues (builtins.mapAttrs (group: svcs: {
-              ${group} = map (s: {
-                ${s.NAME} = {
-                  href = "https://${toDomain s.SUB-DOMAIN}";
-                  icon = s.ICON;
-                  description = s.DESCRIPTION;
-                };
-              }) svcs;
-            }) grouped);
+        services = let grouped = builtins.groupBy (s: s.GROUP) all_services;
+        in builtins.attrValues (builtins.mapAttrs (group: svcs: {
+          ${group} = map (s: {
+            ${s.NAME} = {
+              href = "https://${toDomain s.SUB-DOMAIN}";
+              icon = s.ICON;
+              description = s.DESCRIPTION;
+            };
+          }) svcs;
+        }) grouped);
       };
 
       dnsmasq = {
@@ -172,10 +173,21 @@ in (import ./arr-media-stack-tweaks.nix args) // (
           # returns NXDOMAIN for every RR type already.
           local = "/${DOMAIN}/";
 
-          # Upstream is the router, deliberately: the query stays on the LAN, so
-          # it survives any future firewall rule that blocks outbound port 53.
+          # Split upstream. The router stays authoritative for "home": it hands
+          # that domain out as DHCP option 15 and answers from its lease table,
+          # so big-boss.home resolves there and nowhere else -- a public
+          # resolver returns NXDOMAIN for it. Every LAN client resolves through
+          # this host, so forwarding "home" anywhere else breaks name lookups
+          # network-wide, not just here.
+          #
+          # Everything else goes to the local DoH proxy. This supersedes the
+          # old "keep the query on the LAN so it survives a block on outbound
+          # 53" reasoning: DoH rides 443, which survives that at least as well.
           no-resolv = true;
-          server = [ ROUTER_IP ];
+          server = [
+            "/home/${ROUTER_IP}"
+            "127.0.0.1#${builtins.toString DOH_PROXY_PORT}"
+          ];
 
           cache-size = 1000;
           domain-needed = true;
@@ -188,26 +200,72 @@ in (import ./arr-media-stack-tweaks.nix args) // (
         };
       };
 
+      # The DoH half of the resolver. dnsmasq forwards everything that is not
+      # local to this, and it re-issues the query inside HTTPS so the ISP sees
+      # only a TLS session to Cloudflare. Note this encrypts exactly one hop:
+      # LAN clients still reach dnsmasq over plaintext UDP 53.
+      dnscrypt-proxy = {
+        enable = true;
+
+        settings = {
+          listen_addresses =
+            [ "127.0.0.1:${builtins.toString DOH_PROXY_PORT}" ];
+          server_names = [ "cloudflare" ];
+
+          # DoH specifically, not DNSCrypt. DNSCrypt runs over its own UDP
+          # protocol, which defeats the point of looking like ordinary HTTPS.
+          doh_servers = true;
+          dnscrypt_servers = false;
+
+          # Selects the transport used to reach the resolver, and has no
+          # bearing on whether AAAA records come back. IPv4 only keeps the
+          # path predictable.
+          ipv6_servers = false;
+
+          # dnsmasq already caches 1000 entries in front of this, so a second
+          # cache underneath it only adds somewhere for stale answers to hide.
+          cache = false;
+
+          # Resolves a real startup deadlock. This proxy has to look up
+          # cloudflare-dns.com (and fetch the resolver list) before it can
+          # serve anything, but the system resolver path is
+          # resolved -> dnsmasq -> this proxy, which is not listening yet.
+          # ignore_system_dns forces the router below to be used instead.
+          ignore_system_dns = true;
+          bootstrap_resolvers = [ "${ROUTER_IP}:53" ];
+        };
+      };
+
     } // (builtins.foldl' (configs: service:
       {
         ${service.SERVICE} = service.config config_args;
       } // configs) { } all_services);
 
-    systemd.services.homepage-dashboard.environment.HOMEPAGE_ALLOWED_HOSTS = lib.mkForce
-      "${DOMAIN},localhost:${builtins.toString HOMELAB_DASHBOARD_PORT},127.0.0.1:${builtins.toString HOMELAB_DASHBOARD_PORT}";
+    systemd.services = {
+      # Ordering only, and best-effort at that: dnscrypt-proxy is Type=simple, so
+      # "started" means the process exists, not that it is answering yet.
+      # Deliberately not a Requires -- if the proxy is dead, dnsmasq must still
+      # come up to serve the o700.net zone and the "home" forwards.
+      dnsmasq.after = [ "dnscrypt-proxy.service" ];
 
-    # Mealie's ExecStartPre (init_db) imports the whole application -- fastapi,
-    # sqlalchemy, alembic, the scraper stack -- before it opens the SQLite file.
-    # That is thousands of small reads with nothing external to block on, so its
-    # runtime is bound entirely by page-cache state. Started by hand it takes
-    # ~15s off a warm cache; during boot it contends with every other unit here
-    # for a cold one and overruns systemd's 90s DefaultTimeoutStartSec, which
-    # kills start-pre and fails the unit. Give it headroom, and retry instead of
-    # staying dead until somebody notices.
-    systemd.services.mealie.serviceConfig = {
-      TimeoutStartSec = "10min";
-      Restart = "on-failure";
-      RestartSec = "15s";
+      homepage-dashboard.environment.HOMEPAGE_ALLOWED_HOSTS = lib.mkForce
+        "${DOMAIN},localhost:${
+          builtins.toString HOMELAB_DASHBOARD_PORT
+        },127.0.0.1:${builtins.toString HOMELAB_DASHBOARD_PORT}";
+
+      # Mealie's ExecStartPre (init_db) imports the whole application -- fastapi,
+      # sqlalchemy, alembic, the scraper stack -- before it opens the SQLite file.
+      # That is thousands of small reads with nothing external to block on, so its
+      # runtime is bound entirely by page-cache state. Started by hand it takes
+      # ~15s off a warm cache; during boot it contends with every other unit here
+      # for a cold one and overruns systemd's 90s DefaultTimeoutStartSec, which
+      # kills start-pre and fails the unit. Give it headroom, and retry instead of
+      # staying dead until somebody notices.
+      mealie.serviceConfig = {
+        TimeoutStartSec = "10min";
+        Restart = "on-failure";
+        RestartSec = "15s";
+      };
     };
 
   })
