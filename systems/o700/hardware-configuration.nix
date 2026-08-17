@@ -84,6 +84,26 @@
       networkConfig.DHCP = "ipv4";
       networkConfig.MulticastDNS = true;
       dhcpV4Config.RequestAddress = o700-IP;
+
+      # Resolve via the local dnsmasq over loopback. Previously nothing here
+      # said so: the router happened to advertise 192.168.1.108 over DHCP, so
+      # the host reached its own resolver by hairpinning off its LAN address.
+      # That made o700's resolution depend on the router's DHCP settings, and
+      # broke it before the lease arrived. Loopback has neither problem.
+      networkConfig.DNS = [ "127.0.0.1" ];
+
+      # "~." is a routing-only domain (no effect on the search list) that makes
+      # this link the resolver for every query, so docker0 or wlp5s0 cannot
+      # claim one by acquiring a DNS server of their own later.
+      networkConfig.Domains = [ "~." ];
+
+      # The router advertises itself as a resolver twice over -- DHCP option 6
+      # and IPv6 RA (fe80::1). resolved ranked both as peers of dnsmasq and
+      # would fail over to them, at which point the o700.net zone silently
+      # stops resolving on the host itself. Refuse both.
+      dhcpV4Config.UseDNS = false;
+      dhcpV6Config.UseDNS = false;
+      ipv6AcceptRAConfig.UseDNS = false;
     };
   };
 
@@ -126,6 +146,12 @@
     resolved = {
       enable = true;
       settings.Resolve.MulticastDNS = "yes";
+
+      # resolved only consults FallbackDNS when *no* DNS server is configured,
+      # so it can never rescue a dnsmasq outage -- all it can do is mask a
+      # misconfiguration by quietly shipping queries to Cloudflare and Google
+      # instead. Empty turns that silent bypass into a visible failure.
+      settings.Resolve.FallbackDNS = [ ];
     };
 
     logind.settings.Login = {

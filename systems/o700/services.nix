@@ -126,20 +126,27 @@ in (import ./arr-media-stack-tweaks.nix args) // (
       dnsmasq = {
         enable = true;
 
-        # Leave this host's own resolution alone: systemd-resolved keeps
-        # /etc/resolv.conf pointed at its loopback stub. Setting this true would
-        # have resolvconf fight resolved over the same file.
+        # Leave /etc/resolv.conf alone: systemd-resolved keeps it pointed at
+        # its loopback stub. Setting this true would have resolvconf fight
+        # resolved over the same file. This host is instead pointed at dnsmasq
+        # explicitly, via systemd.network in hardware-configuration.nix.
         resolveLocalQueries = false;
 
         settings = {
-          # Bind one explicit address rather than the interface. enp4s0 also
+          # Bind explicit addresses rather than the interface. enp4s0 also
           # carries globally routable IPv6 addresses and this host runs with
           # networking.firewall.enable = false, so binding the interface would
           # expose an open resolver to the internet -- reliably discovered and
           # abused for DNS amplification. bind-dynamic (rather than
           # bind-interfaces) tolerates the address not existing yet at boot,
           # since it arrives via DHCP.
-          listen-address = o700-IP;
+          #
+          # Loopback is listed so this host can reach its own resolver without
+          # depending on the DHCP lease: systemd-resolved is pointed at
+          # 127.0.0.1 (see systemd.network in hardware-configuration.nix).
+          # resolved's own stub occupies 127.0.0.53/127.0.0.54, not .1, so
+          # there is no conflict.
+          listen-address = [ o700-IP "127.0.0.1" ];
           bind-dynamic = true;
 
           # Wildcard: every name under the zone resolves to this host, matching
@@ -152,6 +159,18 @@ in (import ./arr-media-stack-tweaks.nix args) // (
             # bypasses dnsmasq entirely regardless of DHCP settings.
             "/use-application-dns.net/"
           ];
+
+          # address= above only ever creates an A record. Since dnsmasq 2.86 a
+          # query for any *other* RR type against a matched domain is forwarded
+          # upstream instead of answered NODATA, so every AAAA lookup for an
+          # internal name was being sent to the router -- disclosing the whole
+          # service inventory and costing a round trip to learn nothing. local=
+          # marks the zone as ours and answers it from local data only. The
+          # man page names this exact pairing as the fix.
+          #
+          # Not needed for use-application-dns.net: an address= with no address
+          # returns NXDOMAIN for every RR type already.
+          local = "/${DOMAIN}/";
 
           # Upstream is the router, deliberately: the query stays on the LAN, so
           # it survives any future firewall rule that blocks outbound port 53.
