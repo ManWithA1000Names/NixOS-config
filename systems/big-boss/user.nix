@@ -2,7 +2,7 @@
   nix.settings.trusted-users = [ USERNAME "@wheel" ];
 
   users.users.${USERNAME} = {
-    extraGroups = [ "networkmanager" ];
+    extraGroups = [ "networkmanager" "docker" ];
 
     packages = with pkgs; [
       fd

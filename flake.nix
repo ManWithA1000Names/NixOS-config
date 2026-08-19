@@ -26,7 +26,6 @@
           ./systems/common/nix.nix
           ./systems/common/user.nix
           ./systems/common/programs.nix
-          ./systems/common/virtualisation.nix
 
           ./systems/big-boss/user.nix
           ./systems/big-boss/desktop.nix

@@ -7,7 +7,7 @@
     uid = 1000;
 
     # Read/write access to the shared media library at /mnt/ex-ssd/media.
-    extraGroups = [ MEDIA_GROUP "wheel" "kvm" "input" "docker" ];
+    extraGroups = [ MEDIA_GROUP "wheel" "kvm" "input" ];
 
     shell = pkgs.fish;
   };
