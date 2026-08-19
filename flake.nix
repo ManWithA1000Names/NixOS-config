@@ -71,7 +71,6 @@
           ./systems/common/nix.nix
           ./systems/common/user.nix
           ./systems/common/programs.nix
-          ./systems/common/virtualisation.nix
 
           ./systems/o700/user.nix
           ./systems/o700/services.nix
