@@ -76,6 +76,7 @@
 
           ./systems/o700/user.nix
           ./systems/o700/services.nix
+          ./systems/o700/arr-media-stack-reqs.nix
           ./systems/o700/hardware-configuration.nix
 
           ({ lib, ... }: {
