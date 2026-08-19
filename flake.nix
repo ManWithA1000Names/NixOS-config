@@ -9,15 +9,22 @@
   outputs = { nixpkgs, agenix, ... }:
     let
       system = "x86_64-linux";
+      USERNAME = "user";
+      MEDIA_GROUP = "media";
+
+      # All IPs are guaranteed by the router.
+      router-IP = "192.168.1.1";
       o700-IP = "192.168.1.108";
+      big-boss-IP = "192.168.1.107";
     in {
       nixosConfigurations.big-boss = nixpkgs.lib.nixosSystem {
         inherit system;
 
-        specialArgs = { inherit o700-IP; };
+        specialArgs = { inherit o700-IP USERNAME MEDIA_GROUP; };
 
         modules = [
           ./systems/common/nix.nix
+          ./systems/common/user.nix
           ./systems/common/programs.nix
           ./systems/common/virtualisation.nix
 
@@ -55,15 +62,15 @@
         inherit system;
 
         specialArgs = {
-          inherit o700-IP;
+          inherit o700-IP big-boss-IP router-IP USERNAME MEDIA_GROUP;
           DOMAIN = "o700.net";
-          MEDIA_GROUP = "media";
         };
 
         modules = [
           agenix.nixosModules.default
 
           ./systems/common/nix.nix
+          ./systems/common/user.nix
           ./systems/common/programs.nix
           ./systems/common/virtualisation.nix
 

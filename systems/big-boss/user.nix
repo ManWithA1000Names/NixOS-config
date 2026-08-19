@@ -1,16 +1,8 @@
-{ pkgs, ... }:
-let username = "user";
-in {
-  nix.settings.trusted-users = [ username "@wheel" ];
+{ pkgs, USERNAME, ... }: {
+  nix.settings.trusted-users = [ USERNAME "@wheel" ];
 
-  users.users.${username} = {
-    isNormalUser = true;
-    description = "The human user";
-
-    extraGroups =
-      [ "networkmanager" "wheel" "kvm" "input" "docker" ];
-
-    shell = pkgs.fish;
+  users.users.${USERNAME} = {
+    extraGroups = [ "networkmanager" ];
 
     packages = with pkgs; [
       fd

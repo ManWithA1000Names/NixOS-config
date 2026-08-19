@@ -7,15 +7,6 @@ let
   MEDIA_ROOT = "/mnt/ex-ssd/media";
 in {
 
-  # Shared group that owns everything under MEDIA_ROOT. Every service that
-  # touches media files runs with this as its primary group (set above),
-  # and the human user is a member too (see o700/user.nix).
-  #
-  # The GID is pinned to a fixed, known value because the NFS export squashes
-  # every client onto this group (see hardware-configuration.nix). A stable
-  # GID keeps that mapping valid across rebuilds and machines.
-  users.groups.${MEDIA_GROUP} = { gid = 985; };
-
   # Jellyfin only needs to *read* the library, so it joins "media" as a
   # supplementary group rather than changing its primary group.
   users.users.jellyfin.extraGroups = [ MEDIA_GROUP ];

@@ -1,6 +1,5 @@
-{ config, pkgs, lib, o700-IP, MEDIA_GROUP, DOMAIN, ... }@args:
+{ config, pkgs, lib, o700-IP, router-IP, MEDIA_GROUP, DOMAIN, ... }@args:
 let
-  ROUTER_IP = "192.168.1.1";
   HOMELAB_DASHBOARD_PORT = 8000;
 
   # Not 5353: systemd-resolved already holds 0.0.0.0:5353 for mDNS, and a
@@ -25,7 +24,7 @@ let
     (import ./services/arr/seerr.nix)
     (import ./services/arr/sonarr.nix)
   ];
-in (import ./arr-media-stack-tweaks.nix args) // (
+in (import ./arr-media-stack-reqs.nix args) // (
   #
   # Assert that all service ports are unique.
   #
@@ -185,7 +184,7 @@ in (import ./arr-media-stack-tweaks.nix args) // (
           # 53" reasoning: DoH rides 443, which survives that at least as well.
           no-resolv = true;
           server = [
-            "/home/${ROUTER_IP}"
+            "/home/${router-IP}"
             "127.0.0.1#${builtins.toString DOH_PROXY_PORT}"
           ];
 
@@ -232,7 +231,7 @@ in (import ./arr-media-stack-tweaks.nix args) // (
           # resolved -> dnsmasq -> this proxy, which is not listening yet.
           # ignore_system_dns forces the router below to be used instead.
           ignore_system_dns = true;
-          bootstrap_resolvers = [ "${ROUTER_IP}:53" ];
+          bootstrap_resolvers = [ "${router-IP}:53" ];
         };
       };
 

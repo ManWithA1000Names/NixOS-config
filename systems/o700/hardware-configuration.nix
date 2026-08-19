@@ -1,4 +1,4 @@
-{ config, lib, o700-IP, modulesPath, pkgs, ... }: {
+{ config, lib, o700-IP, big-boss-IP, modulesPath, pkgs, ... }: {
   imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
 
   boot = {
@@ -81,21 +81,25 @@
 
     network.networks."10-ethernet" = {
       matchConfig.Type = "ether";
-      networkConfig.DHCP = "ipv4";
-      networkConfig.MulticastDNS = true;
+
+      networkConfig = {
+        DHCP = "ipv4";
+        MulticastDNS = true;
+
+        # Resolve via the local dnsmasq over loopback. Previously nothing here
+        # said so: the router happened to advertise 192.168.1.108 over DHCP, so
+        # the host reached its own resolver by hairpinning off its LAN address.
+        # That made o700's resolution depend on the router's DHCP settings, and
+        # broke it before the lease arrived. Loopback has neither problem.
+        DNS = [ "127.0.0.1" ];
+
+        # "~." is a routing-only domain (no effect on the search list) that makes
+        # this link the resolver for every query, so docker0 or wlp5s0 cannot
+        # claim one by acquiring a DNS server of their own later.
+        Domains = [ "~." ];
+      };
+
       dhcpV4Config.RequestAddress = o700-IP;
-
-      # Resolve via the local dnsmasq over loopback. Previously nothing here
-      # said so: the router happened to advertise 192.168.1.108 over DHCP, so
-      # the host reached its own resolver by hairpinning off its LAN address.
-      # That made o700's resolution depend on the router's DHCP settings, and
-      # broke it before the lease arrived. Loopback has neither problem.
-      networkConfig.DNS = [ "127.0.0.1" ];
-
-      # "~." is a routing-only domain (no effect on the search list) that makes
-      # this link the resolver for every query, so docker0 or wlp5s0 cannot
-      # claim one by acquiring a DNS server of their own later.
-      networkConfig.Domains = [ "~." ];
 
       # The router advertises itself as a resolver twice over -- DHCP option 6
       # and IPv6 RA (fe80::1). resolved ranked both as peers of dnsmasq and
@@ -161,11 +165,12 @@
 
     nfs.server = {
       enable = true;
-      # The SSD export uses all_squash so that *any* client -- regardless of
-      # its local users/groups -- is mapped onto the server's "user" account
-      # and "media" group. That account owns the existing data and the media
-      # group owns the Arr-stack tree, so every client gets full read/write
-      # access without needing a matching UID/GID configured on its end.
+      # Exported to big-boss alone rather than the whole LAN: sec=sys lets any
+      # host that can reach port 2049 claim any UID, so the client list *is*
+      # the access control. big-boss holds this address by way of a router
+      # reservation, and NetworkManager additionally re-requests its previous
+      # lease, so the two must be kept in step -- if it ever lands on a
+      # different address the mount fails with an access error.
       #
       # "mountpoint" makes exportfs skip the entry unless /mnt/ex-ssd is an
       # actual mount. It is the second half of the removable-drive handling:
@@ -173,9 +178,7 @@
       # get an access error instead of silently reading an empty directory
       # and concluding the library was deleted.
       exports = ''
-        /mnt/ex-ssd 192.168.1.0/24(rw,sync,no_subtree_check,mountpoint,all_squash,anonuid=${
-          toString config.users.users.user.uid
-        },anongid=${toString config.users.groups.media.gid})
+        /mnt/ex-ssd ${big-boss-IP}(rw,sync,no_subtree_check,mountpoint)
       '';
     };
   };
