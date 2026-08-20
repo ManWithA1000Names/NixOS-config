@@ -76,6 +76,8 @@
           ./systems/o700/services.nix
           ./systems/o700/arr-media-stack-reqs.nix
           ./systems/o700/hardware-configuration.nix
+          ./systems/o700/monitoring.nix
+          ./systems/o700/hardening.nix
 
           ({ lib, ... }: {
             time.timeZone = "Europe/Athens";
@@ -92,9 +94,17 @@
               group = "caddy";
             };
 
+            # Telegram bot token and chat ID for alerting (Alertmanager,
+            # OnFailure notifier, boot notice). Format of the encrypted file:
+            #   TELEGRAM_BOT_TOKEN=bot123456:AA...
+            #   TELEGRAM_CHAT_ID=-1001234567890
+            # Create with: agenix -e secrets/alerting.age
+            age.secrets.alerting.file = ./secrets/alerting.age;
+
             networking = {
               hostName = "o700";
-              firewall.enable = false;
+              # firewall.enable is owned by hardening.nix (set to true).
+              # Removed from here to avoid a mkMerge conflict.
               useNetworkd = true;
             };
 

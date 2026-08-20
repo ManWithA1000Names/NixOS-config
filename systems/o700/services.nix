@@ -6,7 +6,7 @@ let
   # 127.0.0.1:5353 bind underneath that wildcard bind fails.
   DOH_PROXY_PORT = 5335;
   toDomain = sub: "${sub}.${DOMAIN}";
-  config_args = { inherit toDomain MEDIA_GROUP; };
+  config_args = { inherit toDomain MEDIA_GROUP pkgs; };
 
   all_services = [
     (import ./services/gitea.nix)
@@ -15,6 +15,8 @@ let
     (import ./services/mealie.nix)
     (import ./services/paperless.nix)
     (import ./services/vaultwarden.nix)
+
+    (import ./services/grafana.nix)
 
     # -- RR stack services
     (import ./services/arr/bazarr.nix)
@@ -64,6 +66,17 @@ in assert (builtins.foldl' (ports: service:
       globalConfig = ''
         acme_dns cloudflare {env.CF_API_TOKEN}
         tls_resolvers 1.1.1.1
+
+        # Per-vhost request rate and status code breakdown. Without per_host,
+        # every vhost's requests collapse into one counter and "which service
+        # is being hammered" becomes unanswerable -- the only question these
+        # metrics are here to answer. per_host adds a `host` label, roughly
+        # 15x the HTTP series; at ~15 vhosts that is well under 1k series.
+        # Metrics served at localhost:2019/metrics, scraped by VictoriaMetrics
+        # (see monitoring/exporters.nix).
+        metrics {
+          per_host
+        }
       '';
 
       virtualHosts = (builtins.foldl' (hosts: service:
@@ -189,10 +202,13 @@ in assert (builtins.foldl' (ports: service:
         domain-needed = true;
         bogus-priv = true;
 
-        # Temporary, for the rollout test: records which client asked for
-        # what, so bypassing devices can be identified from evidence rather
-        # than guessed at. Remove once the DNS path is confirmed working.
+        # Query log routed to a file rather than the journal. At LAN scale
+        # this is thousands of entries per hour; shipping them through the
+        # journal to VictoriaLogs would dominate its retention budget. The
+        # file is still there for debugging strange client behaviour:
+        #   journalctl -f --file /var/log/dnsmasq/queries.log  (or just tail)
         log-queries = true;
+        log-facility = "/var/log/dnsmasq/queries.log";
       };
     };
 
@@ -235,6 +251,13 @@ in assert (builtins.foldl' (ports: service:
     {
       ${service.SERVICE} = service.config config_args;
     } // configs) { } all_services);
+
+  systemd.tmpfiles.rules = [
+    # dnsmasq log directory. dnsmasq drops privileges to the dnsmasq user
+    # (--user=dnsmasq in its ExecStart) after binding ports; the log file
+    # must therefore be writable by that user.
+    "d /var/log/dnsmasq 0750 dnsmasq dnsmasq - -"
+  ];
 
   systemd.services = {
     # Ordering only, and best-effort at that: dnscrypt-proxy is Type=simple, so
