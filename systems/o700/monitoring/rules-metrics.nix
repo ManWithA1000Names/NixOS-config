@@ -352,9 +352,19 @@
           # is failing -- what changed is that the cap, not retentionPeriod, is
           # now what bounds history, so logs are aging out earlier than 120d.
           #
-          # Verify: curl -s 127.0.0.1:9428/metrics | grep data_size
+          # Ratio rather than a byte literal so the threshold tracks the flag:
+          # vl_max_disk_space_usage_bytes reports whatever
+          # -retention.maxDiskSpaceUsageBytes is set to, so changing the cap
+          # cannot leave a stale constant here that fires early or never.
+          #
+          # sum() spans the two type= labels VictoriaLogs splits its footprint
+          # across (indexdb and storage), which together are what the cap is
+          # measured against. The name is vl_data_size_bytes, NOT
+          # vl_storage_data_size_bytes -- the latter does not exist in any
+          # spelling, and since a nonexistent metric yields no samples rather
+          # than an error, this rule sat healthy-looking and unfireable.
           alert = "VictoriaLogsRetentionTruncated";
-          expr = "sum(vl_storage_data_size_bytes) > 29e9";
+          expr = "sum(vl_data_size_bytes) / max(vl_max_disk_space_usage_bytes) > 0.9";
           "for" = "1h";
           labels.severity = "warning";
           annotations.summary = "VictoriaLogs near its 30GiB cap -- retention is now shorter than 120d";

@@ -1,5 +1,6 @@
 {
   config,
+  lib,
   pkgs,
   PORTS,
   IP,
@@ -92,6 +93,46 @@
       # boot until fail2ban itself is running -- expected, not a bug.
     };
   };
+
+  # The `host` set above does not reach the binary. The nixpkgs module renders
+  # an ExecStart whose line continuation is broken by a whitespace-only line,
+  # so systemd stops collecting arguments there and parses the rest as
+  # [Service] directives:
+  #
+  #   prometheus-fail2ban-exporter.service:17:
+  #     Unknown key '--web.listen-address' in section [Service], ignoring.
+  #
+  # The observable result is `starting server at :9191` in the exporter's log
+  # and a wildcard bind in `ss`. The firewall still refuses the port from off
+  # host, so this was defence-in-depth rather than an open port -- but the
+  # config claimed loopback and the running system was not doing it, which is
+  # the kind of gap that only shows up when the firewall is the thing that
+  # broke.
+  #
+  # The empty line is emitted by the module's own optionalString for the
+  # optional HTTP-basic-auth block, which yields "" whenever `username` is
+  # null -- the default -- leaving only that line's indentation behind. So the
+  # bug is present for every user who does not enable basic auth.
+  #
+  # Repairing the blank line alone would not be enough: the module also wraps
+  # the address in literal double quotes, and systemd only strips quotes at the
+  # start of a word, so the binary would receive `"127.0.0.1:9191"` and fail to
+  # bind at all. Overriding the whole command sidesteps both defects.
+  #
+  # Recheck on nixpkgs bumps -- once the module is fixed this override still
+  # works but silently stops being necessary. Verify after a rebuild with
+  # `journalctl -u prometheus-fail2ban-exporter | grep "starting server"`:
+  # it must say 127.0.0.1:9191, not :9191.
+  systemd.services.prometheus-fail2ban-exporter.serviceConfig.ExecStart = lib.mkForce (
+    lib.concatStringsSep " " [
+      (lib.getExe pkgs.prometheus-fail2ban-exporter)
+      "--collector.f2b.exit-on-socket-connection-error"
+      "--web.listen-address=127.0.0.1:${toString PORTS.FAIL2BAN}"
+      # Same value the module would have used, rather than a second copy of the
+      # path that can drift from services.fail2ban's actual socket.
+      "--collector.f2b.socket=${config.services.prometheus.exporters.fail2ban.fail2banSocket}"
+    ]
+  );
 
   # Caddy admin API is the metrics source and the reload mechanism. The NixOS
   # Caddy module calls `caddy reload` on every nixos-rebuild switch, which

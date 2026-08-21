@@ -189,6 +189,17 @@
     listenAddress = "127.0.0.1";
     port = PORTS.ALERT_MANAGER;
 
+    # listenAddress above only covers the web/API listener on 9093. Alertmanager
+    # has a second, independent gossip listener for HA peering that defaults to
+    # 0.0.0.0:9094, and the nixpkgs module never passes the flag -- so `ss`
+    # showed 9094 on the wildcard while 9093 was correctly on loopback.
+    #
+    # Empty string disables HA mode outright rather than moving the port to
+    # loopback. This is a single-node Alertmanager with no peers configured, so
+    # the gossip listener has nothing to talk to; binding it anywhere at all is
+    # surface bought for a feature that is not in use.
+    extraFlags = [ "--cluster.listen-address=" ];
+
     # configText rather than the structured `configuration` option for one
     # specific reason: Alertmanager types chat_id as int64. The structured
     # path renders the envsubst placeholder as a quoted JSON string, which
