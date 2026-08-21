@@ -30,6 +30,7 @@
           ./systems/big-boss/programs.nix
           ./systems/big-boss/services.nix
           ./systems/big-boss/networking.nix
+          ./systems/big-boss/virtualisation.nix
           ./systems/big-boss/hardware-configuration.nix
         ];
       };

@@ -1,4 +1,9 @@
-{ pkgs, ... }: {
+{
+  pkgs,
+  USERNAME,
+  ...
+}:
+{
   services = {
 
     hypridle.enable = true;
@@ -15,7 +20,11 @@
       settings = rec {
         initial_session = {
           command = "${pkgs.hyprland}/bin/start-hyprland";
-          user = "user";
+          # The autologin target must be the same account common/user.nix
+          # creates. Spelling it literally here meant a rename of USERNAME
+          # would leave greetd pointing at an account that no longer exists,
+          # which fails at login rather than at build.
+          user = USERNAME;
         };
         default_session = initial_session;
       };
