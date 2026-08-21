@@ -93,7 +93,10 @@
           check_for_updates = false;
         };
         users.allow_sign_up = false;
-        auth.anonymous.enabled = false;
+        # Quoted: this is the literal INI section name `[auth.anonymous]`, not
+        # an `anonymous` key inside an `auth` section. Unquoted, Nix's dot
+        # syntax nests it and the generator rejects the attrset as a value.
+        "auth.anonymous".enabled = false;
       };
 
       provision = {
