@@ -312,20 +312,32 @@
           annotations.summary = "VictoriaLogs free disk below 15 GB (refuses writes at 5 GB)";
         }
         {
-          # -storage.maxDiskSpaceUsageBytes is 20GiB. Reaching ~90% of it means
-          # the cap, not retentionPeriod, has become what bounds history: data
-          # is being evicted earlier than 120 days without anything failing.
-          # That is a correctness change worth knowing about, not an outage.
+          # The only alert in this group with no automatic remedy behind it.
+          # VictoriaMetrics has no size-cap flag at all (see monitoring.nix), so
+          # nothing evicts oldest-first when it grows past budget -- it simply
+          # keeps growing until -storage.minFreeDiskSpaceBytes trips and
+          # ingestion stops dead. 20GB is ~10x the expected footprint at 120d,
+          # so crossing it means something changed shape, almost certainly
+          # series cardinality rather than sample volume.
           #
-          # Verify: curl -s 127.0.0.1:8428/metrics | grep data_size
-          alert = "VictoriaMetricsRetentionTruncated";
-          expr = "sum(vm_data_size_bytes) > 19.3e9";
+          # Clearing it is manual: find the offending series and drop them, or
+          # shorten retentionPeriod. Start with
+          #   curl -s 127.0.0.1:8428/api/v1/status/tsdb
+          #
+          # Verify metric name: curl -s 127.0.0.1:8428/metrics | grep data_size
+          alert = "VictoriaMetricsGrowthUnbounded";
+          expr = "sum(vm_data_size_bytes) > 20e9";
           "for" = "1h";
           labels.severity = "warning";
-          annotations.summary = "VictoriaMetrics near its 20GiB cap -- retention is now shorter than 120d";
+          annotations.summary = "VictoriaMetrics past 20GB and nothing evicts automatically -- check cardinality before it hits the read-only brake";
         }
         {
-          # Same, against -retention.maxDiskSpaceUsageBytes=30GiB.
+          # Unlike the VictoriaMetrics alert above, this one is informational:
+          # -retention.maxDiskSpaceUsageBytes=30GiB means VictoriaLogs is
+          # already dropping oldest per-day partitions to stay under it. Nothing
+          # is failing -- what changed is that the cap, not retentionPeriod, is
+          # now what bounds history, so logs are aging out earlier than 120d.
+          #
           # Verify: curl -s 127.0.0.1:9428/metrics | grep data_size
           alert = "VictoriaLogsRetentionTruncated";
           expr = "sum(vl_storage_data_size_bytes) > 29e9";

@@ -250,15 +250,17 @@ in
       exports = ''
         ${PATHS.EX-SSD} ${IP.big-boss}(rw,sync,no_subtree_check,mountpoint)
       '';
-
-      # Force NFSv4-only so the firewall surface is one port (2049) instead of
-      # five. NFSv3 additionally requires rpcbind (111) and mountd, statd and
-      # lockd on ports that are random unless pinned. If big-boss ever mounts with
-      # vers=3 it will fail loudly at mount time, which is the correct outcome.
-      extraNfsdConfig = ''
-        vers3=n
-      '';
     };
+
+    # Force NFSv4-only so the firewall surface is one port (2049) instead of
+    # five. NFSv3 additionally requires rpcbind (111) and mountd, statd and
+    # lockd on ports that are random unless pinned. If big-boss ever mounts with
+    # vers=3 it will fail loudly at mount time, which is the correct outcome.
+    #
+    # Sits under services.nfs rather than services.nfs.server, and replaces the
+    # deprecated extraNfsdConfig: `settings` covers the whole of nfs.conf, and
+    # an assertion rejects the two being set together rather than merging them.
+    nfs.settings.nfsd.vers3 = false;
 
     openssh = {
       enable = true;

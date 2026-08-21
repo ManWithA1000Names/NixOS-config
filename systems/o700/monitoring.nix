@@ -29,26 +29,27 @@
     retentionPeriod = "120d";
 
     extraOptions = [
-      # Evict oldest-first to stay under the cap. This is the mechanism that
-      # keeps a runaway from ever reaching the read-only threshold below:
-      # ingestion continues uninterrupted and old partitions are dropped
-      # instead. Sized ~10x expected usage, so in normal operation
-      # retentionPeriod is what binds and this never engages -- it is runaway
-      # protection, not a storage budget.
+      # NOTE: there is deliberately no size cap here, unlike VictoriaLogs below.
+      # VictoriaMetrics has no equivalent flag: as of 1.148.0 the whole flag set
+      # in app/vmstorage/main.go offers -retentionPeriod and
+      # -storage.minFreeDiskSpaceBytes and nothing that evicts oldest-first to
+      # stay under a byte budget. -retention.maxDiskSpaceUsageBytes is a
+      # VictoriaLogs flag and is rejected here.
       #
-      # Dropping happens per-partition, so actual usage sawtooths below the cap
-      # rather than sitting against it. VM enforces a minimum here; if it
-      # refuses to start with an argument error, raise to its stated minimum
-      # rather than lowering.
-      "-storage.maxDiskSpaceUsageBytes=20GiB"
+      # The practical consequence is that VM has no runaway protection that
+      # degrades gracefully. Time-based retention above is the only thing
+      # bounding its size, and it only bounds it if the series count stays what
+      # was assumed -- a cardinality explosion grows the disk with no mechanism
+      # to trim it. The brake below is a hard stop, not a trim, so the
+      # VictoriaMetricsRetentionTruncated alert is the actual safety net and is
+      # load-bearing rather than informational.
 
-      # Hard stop before the root filesystem is endangered, for the case the
-      # cap above cannot help with: something *other* than VictoriaMetrics
-      # eating the disk. At this threshold VM goes read-only rather than
-      # continuing until ext4 has no room for its journal. Losing new metrics
-      # is recoverable; a full root disk takes sshd, Caddy and the whole box
-      # with it. VictoriaMetricsReadOnly in rules-metrics.nix makes this state
-      # loud, and VictoriaMetricsDiskLow warns well before it.
+      # Hard stop before the root filesystem is endangered. At this threshold VM
+      # goes read-only rather than continuing until ext4 has no room for its
+      # journal. Losing new metrics is recoverable; a full root disk takes sshd,
+      # Caddy and the whole box with it. VictoriaMetricsReadOnly in
+      # rules-metrics.nix makes this state loud, and VictoriaMetricsDiskLow
+      # warns well before it.
       "-storage.minFreeDiskSpaceBytes=5GB"
 
       # The default -memory.allowedPercent=60 would reserve ~9.6 GB of this
@@ -74,12 +75,21 @@
       # compressed, so this is 3-5 GB.
       "-retentionPeriod=120d"
 
-      # Evict oldest-first to stay under the cap. Time-based retention only
-      # holds if the ingest rate stays what was assumed; a log loop or a
-      # scanner storm can burn through 120 days' worth of budget in hours.
-      # Sized ~6x expected usage: runaway protection, not a storage budget.
-      # VictoriaLogs enforces a minimum; if startup fails with an argument
-      # error, raise to its stated minimum rather than lowering.
+      # Drops oldest per-day partitions once total usage exceeds this. Exists
+      # here and not on VictoriaMetrics because only VictoriaLogs has the flag.
+      # Time-based retention alone only holds if the ingest rate stays what was
+      # assumed; a log loop or a scanner storm can burn through 120 days' worth
+      # of budget in hours. Sized ~6x expected usage: runaway protection, not a
+      # storage budget.
+      #
+      # Eviction is per-day-partition, so usage sawtooths under the cap rather
+      # than sitting against it, and VictoriaLogs always keeps the last two days
+      # regardless -- so usage can exceed this if two days alone are bigger than
+      # the cap. At 20-40 MB/day that is not reachable here short of a runaway
+      # so large the alerts fire first.
+      #
+      # Mutually exclusive with -retention.maxDiskUsagePercent; setting both
+      # makes VictoriaLogs refuse to start.
       "-retention.maxDiskSpaceUsageBytes=30GiB"
 
       # Same reasoning as VictoriaMetrics: refuse writes before root fills.
