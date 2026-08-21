@@ -261,7 +261,7 @@ in
       # Sits under services.nfs rather than services.nfs.server, and replaces the
       # deprecated extraNfsdConfig: `settings` covers the whole of nfs.conf, and
       # an assertion rejects the two being set together rather than merging them.
-      nfs.settings.nfsd.vers3 = false;
+      settings.nfsd.vers3 = false;
     };
 
     openssh = {
