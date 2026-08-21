@@ -6,123 +6,70 @@
     agenix.url = "github:ryantm/agenix";
   };
 
-  outputs = { nixpkgs, agenix, ... }:
+  outputs =
+    { nixpkgs, agenix, ... }:
     let
       system = "x86_64-linux";
-      USERNAME = "user";
-      MEDIA_GROUP = "media";
-
-      # All IPs are guaranteed by the router.
-      router-IP = "192.168.1.1";
-      o700-IP = "192.168.1.108";
-      big-boss-IP = "192.168.1.107";
-    in {
+      pkgs = import nixpkgs { inherit system; };
+      STATIC_GLOBAL_VARS = import ./STATIC_GLOBAL_VARS.nix;
+    in
+    {
       nixosConfigurations.big-boss = nixpkgs.lib.nixosSystem {
         inherit system;
 
-        specialArgs = { inherit o700-IP USERNAME MEDIA_GROUP; };
+        specialArgs = STATIC_GLOBAL_VARS;
 
         modules = [
           ./systems/common/nix.nix
           ./systems/common/user.nix
           ./systems/common/programs.nix
+          ./systems/common/localization.nix
 
           ./systems/big-boss/user.nix
           ./systems/big-boss/desktop.nix
           ./systems/big-boss/programs.nix
           ./systems/big-boss/services.nix
+          ./systems/big-boss/networking.nix
           ./systems/big-boss/hardware-configuration.nix
-
-          ({ lib, ... }: {
-
-            time.timeZone = "Europe/Athens";
-            i18n = {
-              defaultLocale = "en_US.UTF-8";
-              supportedLocales = [ "en_US.UTF-8/UTF-8" "el_GR.UTF-8/UTF-8" ];
-            };
-
-            security.rtkit.enable = true;
-
-            networking = {
-              hostName = "big-boss";
-              firewall.enable = false;
-              networkmanager.enable = true;
-            };
-
-            # By default nix has some aliases that need to go.
-            environment.shellAliases = lib.mkForce { };
-
-            system.stateVersion = "26.05";
-          })
         ];
       };
 
       nixosConfigurations.o700 = nixpkgs.lib.nixosSystem {
         inherit system;
 
-        specialArgs = {
-          inherit o700-IP big-boss-IP router-IP USERNAME MEDIA_GROUP;
-          DOMAIN = "o700.net";
-        };
+        specialArgs = STATIC_GLOBAL_VARS;
 
         modules = [
           agenix.nixosModules.default
+          ./modules/seta.nix
 
           ./systems/common/nix.nix
           ./systems/common/user.nix
           ./systems/common/programs.nix
+          ./systems/common/localization.nix
 
           ./systems/o700/user.nix
-          ./systems/o700/services.nix
-          ./systems/o700/arr-media-stack-reqs.nix
-          ./systems/o700/hardware-configuration.nix
+          ./systems/o700/networking.nix
           ./systems/o700/monitoring.nix
-          ./systems/o700/hardening.nix
-
-          ({ lib, ... }: {
-            time.timeZone = "Europe/Athens";
-            i18n = {
-              defaultLocale = "en_US.UTF-8";
-              supportedLocales = [ "en_US.UTF-8/UTF-8" "el_GR.UTF-8/UTF-8" ];
-            };
-
-            security.rtkit.enable = true;
-
-            age.secrets.cloudflare-dns-api = {
-              file = ./secrets/cloudflare-dns-api.age;
-              owner = "caddy";
-              group = "caddy";
-            };
-
-            # Telegram bot token and chat ID for alerting (Alertmanager,
-            # OnFailure notifier, boot notice). Format of the encrypted file:
-            #   TELEGRAM_BOT_TOKEN=bot123456:AA...
-            #   TELEGRAM_CHAT_ID=-1001234567890
-            # Create with: agenix -e secrets/alerting.age
-            age.secrets.alerting.file = ./secrets/alerting.age;
-
-            networking = {
-              hostName = "o700";
-              # firewall.enable is owned by hardening.nix (set to true).
-              # Removed from here to avoid a mkMerge conflict.
-              useNetworkd = true;
-            };
-
-            # By default nix has some aliases that need to go.
-            environment.shellAliases = lib.mkForce { };
-
-            system.stateVersion = "26.05";
-          })
+          ./systems/o700/used-secrets.nix
+          ./systems/o700/services-LAN.nix
+          ./systems/o700/services-WAN.nix
+          ./systems/o700/services-internal.nix
+          ./systems/o700/hardware-configuration.nix
         ];
       };
 
+      formatter.${system} = pkgs.nixfmt-tree;
+
       devShells.${system}.default =
-        let pkgs = import nixpkgs { inherit system; };
-        in pkgs.mkShell {
-          buildInputs = with pkgs; [
-            nixpkgs-fmt
-            nil
-            nixd
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        pkgs.mkShell {
+          buildInputs = [
+            pkgs.nixfmt
+            pkgs.nil
+            pkgs.nixd
             agenix.packages.${system}.agenix
           ];
         };

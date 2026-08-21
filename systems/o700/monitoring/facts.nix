@@ -1,10 +1,20 @@
-{ config, pkgs, lib, USERNAME, ... }:
+{
+  pkgs,
+  lib,
+  PATHS,
+  USERNAME,
+  ...
+}:
 let
   textfile-dir = "/var/lib/node-exporter-textfile";
 
   facts-script = pkgs.writeShellApplication {
     name = "node-exporter-facts";
-    runtimeInputs = with pkgs; [ coreutils findutils util-linux ];
+    runtimeInputs = with pkgs; [
+      coreutils
+      findutils
+      util-linux
+    ];
     text = ''
       TEXTFILE_DIR="${textfile-dir}"
       OUT="$TEXTFILE_DIR/facts.prom"
@@ -14,17 +24,17 @@ let
         # SSD mount presence. Used by the ExternalSSDUnmounted alert. This
         # check must NOT fail when the drive is absent -- that is the very
         # state it is reporting.
-        if mountpoint -q /mnt/ex-ssd 2>/dev/null; then
-          printf 'o700_mount_present{mount="/mnt/ex-ssd"} 1\n'
+        if mountpoint -q ${PATHS.EX-SSD} 2>/dev/null; then
+          printf 'o700_mount_present{mount="${PATHS.EX-SSD}"} 1\n'
         else
-          printf 'o700_mount_present{mount="/mnt/ex-ssd"} 0\n'
+          printf 'o700_mount_present{mount="${PATHS.EX-SSD}"} 0\n'
         fi
 
         # Vaultwarden backup age in seconds since the newest file under the
         # backup directory was last modified. Only meaningful when the SSD is
         # mounted; absent when it is not (a separate alert fires then).
-        if mountpoint -q /mnt/ex-ssd 2>/dev/null; then
-          newest=$(find /mnt/ex-ssd/backup/warden/ -type f -printf '%T@\n' \
+        if mountpoint -q ${PATHS.EX-SSD} 2>/dev/null; then
+          newest=$(find ${PATHS.BACKUP_ROOT}/warden/ -type f -printf '%T@\n' \
                    2>/dev/null | sort -rn | head -1)
           if [ -n "$newest" ]; then
             # find -printf %T@ gives seconds.microseconds; strip the decimal.
@@ -59,7 +69,8 @@ let
       mv "$TMP" "$OUT"
     '';
   };
-in {
+in
+{
   # The textfile collector reads from this directory. World-readable so
   # node_exporter (DynamicUser) can read without group membership.
   systemd.tmpfiles.rules = [

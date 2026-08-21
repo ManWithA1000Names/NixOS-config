@@ -1,8 +1,14 @@
 { pkgs, USERNAME, ... }: {
-  nix.settings.trusted-users = [ USERNAME "@wheel" ];
+  nix.settings.trusted-users = [
+    USERNAME
+    "@wheel"
+  ];
 
   users.users.${USERNAME} = {
-    extraGroups = [ "networkmanager" "docker" ];
+    extraGroups = [
+      "networkmanager"
+      "docker"
+    ];
 
     packages = with pkgs; [
       fd

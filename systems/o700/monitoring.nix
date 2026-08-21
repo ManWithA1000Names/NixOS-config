@@ -1,11 +1,14 @@
-{ config, pkgs, lib, ... }:
-let
-  ports = import ./monitoring/ports.nix;
-in {
+{
+  config,
+  PORTS,
+  ...
+}@args:
+{
   imports = [
     ./monitoring/exporters.nix
     ./monitoring/facts.nix
     ./monitoring/notify.nix
+    ./monitoring/shipping.nix
   ];
 
   # ---------------------------------------------------------------------------
@@ -17,19 +20,35 @@ in {
 
     # Loopback: scraped by itself, vmalert, and Grafana. Never needs to be
     # reachable from outside, and is not opened in the firewall.
-    listenAddress = "127.0.0.1:${toString ports.victoriametrics}";
+    listenAddress = "127.0.0.1:${toString PORTS.VICTORIA_METRICS}";
 
-    # 16 MB/day at the configured scrape set and 30s interval, so 90 days is
-    # ~1.5 GB plus index. 90 days is the shortest window that still answers
-    # "was this normal three months ago?" after an incident.
-    retentionPeriod = "90d";
+    # 16 MB/day at the configured scrape set and 30s interval, so 120 days is
+    # ~2 GB plus index. Metrics are two orders of magnitude cheaper per day
+    # than logs, so the retention window is set by what is useful rather than
+    # by what is affordable: a full seasonal cycle of "was this normal?".
+    retentionPeriod = "120d";
 
     extraOptions = [
-      # Hard stop before the root filesystem is endangered. At this threshold
-      # VM goes read-only rather than continuing until ext4 has no room for its
-      # journal. Losing new metrics is recoverable; a full root disk takes sshd,
-      # Caddy and the whole box with it. VictoriaMetricsReadOnly in
-      # rules-metrics.nix makes this state loud.
+      # Evict oldest-first to stay under the cap. This is the mechanism that
+      # keeps a runaway from ever reaching the read-only threshold below:
+      # ingestion continues uninterrupted and old partitions are dropped
+      # instead. Sized ~10x expected usage, so in normal operation
+      # retentionPeriod is what binds and this never engages -- it is runaway
+      # protection, not a storage budget.
+      #
+      # Dropping happens per-partition, so actual usage sawtooths below the cap
+      # rather than sitting against it. VM enforces a minimum here; if it
+      # refuses to start with an argument error, raise to its stated minimum
+      # rather than lowering.
+      "-storage.maxDiskSpaceUsageBytes=20GiB"
+
+      # Hard stop before the root filesystem is endangered, for the case the
+      # cap above cannot help with: something *other* than VictoriaMetrics
+      # eating the disk. At this threshold VM goes read-only rather than
+      # continuing until ext4 has no room for its journal. Losing new metrics
+      # is recoverable; a full root disk takes sshd, Caddy and the whole box
+      # with it. VictoriaMetricsReadOnly in rules-metrics.nix makes this state
+      # loud, and VictoriaMetricsDiskLow warns well before it.
       "-storage.minFreeDiskSpaceBytes=5GB"
 
       # The default -memory.allowedPercent=60 would reserve ~9.6 GB of this
@@ -46,21 +65,22 @@ in {
 
   services.victorialogs = {
     enable = true;
-    listenAddress = "127.0.0.1:${toString ports.victorialogs}";
+    listenAddress = "127.0.0.1:${toString PORTS.VICTORIA_LOGS}";
 
     extraOptions = [
-      # 30-day retention. Logs answer "what happened during this incident";
-      # incidents are found within days, not months. Longer questions are
-      # better answered by the metrics above, which are two orders of magnitude
-      # cheaper per day.
-      "-retentionPeriod=30d"
+      # 120 days, matching the metrics window above so a post-mortem never has
+      # metrics for a period it has no logs for -- the mismatch is only ever
+      # discovered at the moment it hurts. Full capture runs 20-40 MB/day
+      # compressed, so this is 3-5 GB.
+      "-retentionPeriod=120d"
 
-      # Disk cap independent of the time-based retention: time retention only
-      # holds if the ingest rate stays what was assumed. A log loop or a
-      # scanner storm can blow through 30 days' worth of budget in hours.
-      # VictoriaLogs may enforce a minimum; if startup fails with an argument
+      # Evict oldest-first to stay under the cap. Time-based retention only
+      # holds if the ingest rate stays what was assumed; a log loop or a
+      # scanner storm can burn through 120 days' worth of budget in hours.
+      # Sized ~6x expected usage: runaway protection, not a storage budget.
+      # VictoriaLogs enforces a minimum; if startup fails with an argument
       # error, raise to its stated minimum rather than lowering.
-      "-retention.maxDiskSpaceUsageBytes=10GiB"
+      "-retention.maxDiskSpaceUsageBytes=30GiB"
 
       # Same reasoning as VictoriaMetrics: refuse writes before root fills.
       "-storage.minFreeDiskSpaceBytes=5GB"
@@ -68,61 +88,39 @@ in {
       # Leave more memory for Jellyfin's page cache.
       "-memory.allowedBytes=512MB"
 
-      # Every distinct combination of stream fields is a separate log stream;
-      # VictoriaLogs pays per-stream overhead. _PID is in the default set,
-      # which means every process restart mints a new stream -- unbounded churn.
-      # Unit + hostname is the granularity we actually query by.
-      "-journald.streamFields=_HOSTNAME,_SYSTEMD_UNIT"
-
-      # These fields are constant-per-boot or non-queryable; dropping them at
-      # ingest is cheaper than storing them and never selecting on them.
-      "-journald.ignoreFields=_MACHINE_ID,_SOURCE_MONOTONIC_TIMESTAMP,__MONOTONIC_TIMESTAMP,_SYSTEMD_INVOCATION_ID,_CAP_EFFECTIVE"
+      # NOTE: -journald.streamFields and -journald.ignoreFields used to be set
+      # here. They apply only to the /insert/journald endpoint, which
+      # systemd-journal-upload used and Vector does not -- shipping now goes
+      # through /insert/elasticsearch (see monitoring/shipping.nix). Left as a
+      # comment rather than dead flags because their equivalents are load-
+      # bearing: stream-field selection moved to the sink's _stream_fields
+      # query parameter, and dropping them there is what prevents a new stream
+      # per PID.
     ];
   };
 
   # ---------------------------------------------------------------------------
-  # Log shipping: systemd-journal-upload → VictoriaLogs
+  # Journald
+  #
+  # Shipping is Vector's job now -- see monitoring/shipping.nix.
+  # services.journald.upload is deliberately NOT enabled: Vector's journald
+  # source reads the same journal, so running both would ingest every entry
+  # into VictoriaLogs twice.
   # ---------------------------------------------------------------------------
 
-  services.journald.upload = {
-    enable = true;
-    settings.Upload = {
-      # journal-upload unconditionally appends "/upload" to whatever is
-      # configured here (it builds proto + host + "/upload" in its URL
-      # parser). VictoriaLogs handles journald ingestion under
-      # /insert/journald and matches "/upload" beneath it, so the request
-      # that lands is /insert/journald/upload -- which is what VictoriaLogs
-      # documents. Do NOT add a trailing slash and do NOT append /upload here;
-      # either produces a 404 that looks like a connectivity problem at runtime.
-      #
-      # The scheme is mandatory. Without it journal-upload defaults to https://
-      # and fails the TLS handshake against a plaintext listener.
-      URL = "http://127.0.0.1:${toString ports.victorialogs}/insert/journald";
-
-      # Bound how long the uploader waits for a dead VictoriaLogs before
-      # exiting. The unit restarts (Restart=always) and resumes from its
-      # saved cursor, so an exit is cheap. The default ("wait forever") turns
-      # a VictoriaLogs restart into a permanently wedged uploader.
-      NetworkTimeoutSec = "30s";
-    };
-  };
-
-  # Limit journald's own on-disk footprint. It is the write-ahead buffer for
-  # journal-upload; it does not need to retain weeks of history independently.
   services.journald.extraConfig = ''
-    # 2G is ~2 weeks of this host's traffic with log-queries routing to a file,
-    # far more slack than the uploader ever needs. SystemKeepFree ensures the
-    # root disk always has headroom even if VictoriaLogs falls behind.
+    # Vector's 1 GiB disk buffer, not this, is the write-ahead buffer for
+    # shipping. What this number bounds is how long Vector can be *dead* before
+    # entries age out unshipped. 500M would be many hours; 2G is days, and the
+    # disk has room to spare. It also matters more than it used to now that
+    # every vhost's access log lands here: fail2ban reads this journal, so
+    # entries aging out early would cost bans, not just history.
     SystemMaxUse=2G
+
+    # Unchanged: guarantees the root disk keeps headroom regardless of the cap
+    # above, since journald is not the only thing writing to it.
     SystemKeepFree=4G
   '';
-
-  systemd.services.systemd-journal-upload = {
-    # Ordering only -- not a hard dependency. If VictoriaLogs is down, the
-    # uploader must still start, fail, and retry; the journal is the buffer.
-    after = [ "victorialogs.service" ];
-    wants = [ "victorialogs.service" ];
-  };
 
   # ---------------------------------------------------------------------------
   # vmalert (rule evaluation and alert dispatch)
@@ -138,12 +136,12 @@ in {
     metrics = {
       enable = true;
       settings = {
-        "datasource.url" = "http://127.0.0.1:${toString ports.victoriametrics}";
-        "notifier.url" = [ "http://127.0.0.1:${toString ports.alertmanager}" ];
-        "httpListenAddr" = "127.0.0.1:${toString ports.vmalert-metrics}";
+        "datasource.url" = "http://127.0.0.1:${toString PORTS.VICTORIA_METRICS}";
+        "notifier.url" = [ "http://127.0.0.1:${toString PORTS.ALERT_MANAGER}" ];
+        "httpListenAddr" = "127.0.0.1:${toString PORTS.VMALERT_METRICS}";
         # Persists for: timers across restarts and writes ALERTS series into
         # VictoriaMetrics so Grafana can show alert history.
-        "remoteWrite.url" = "http://127.0.0.1:${toString ports.victoriametrics}";
+        "remoteWrite.url" = "http://127.0.0.1:${toString PORTS.VICTORIA_METRICS}";
         "external.url" = "https://grafana.o700.net";
         "external.label" = [ "host=o700" ];
       };
@@ -152,7 +150,7 @@ in {
       # NOT `group:` (the nixpkgs example uses the wrong key).
       # After deploy, verify rule count in the vmalert UI: if it shows 0 rules
       # loaded, the top-level key is wrong.
-      rules = import ./monitoring/rules-metrics.nix;
+      rules = import ./monitoring/rules-metrics.nix args;
     };
 
     logs = {
@@ -161,14 +159,14 @@ in {
         # datasource.url is the bare VictoriaLogs base URL, NOT a path under
         # /select. With type: vlogs in the rule group, vmalert routes to
         # /select/logsql/stats_query by itself.
-        "datasource.url" = "http://127.0.0.1:${toString ports.victorialogs}";
-        "notifier.url" = [ "http://127.0.0.1:${toString ports.alertmanager}" ];
-        "httpListenAddr" = "127.0.0.1:${toString ports.vmalert-logs}";
-        "remoteWrite.url" = "http://127.0.0.1:${toString ports.victoriametrics}";
+        "datasource.url" = "http://127.0.0.1:${toString PORTS.VICTORIA_LOGS}";
+        "notifier.url" = [ "http://127.0.0.1:${toString PORTS.ALERT_MANAGER}" ];
+        "httpListenAddr" = "127.0.0.1:${toString PORTS.VMALERT_LOGS}";
+        "remoteWrite.url" = "http://127.0.0.1:${toString PORTS.VICTORIA_METRICS}";
         "external.url" = "https://grafana.o700.net";
         "external.label" = [ "host=o700" ];
       };
-      rules = import ./monitoring/rules-logs.nix;
+      rules = import ./monitoring/rules-logs.nix args;
     };
   };
 
@@ -179,7 +177,7 @@ in {
   services.prometheus.alertmanager = {
     enable = true;
     listenAddress = "127.0.0.1";
-    port = ports.alertmanager;
+    port = PORTS.ALERT_MANAGER;
 
     # configText rather than the structured `configuration` option for one
     # specific reason: Alertmanager types chat_id as int64. The structured
@@ -241,16 +239,4 @@ in {
                 {{ end -}}
     '';
   };
-
-  # ---------------------------------------------------------------------------
-  # Grafana (dashboards + provisioned datasources)
-  # Loaded declaratively by the victoriametrics-logs-datasource plugin.
-  # ---------------------------------------------------------------------------
-
-  # If Grafana refuses to load the plugin (signature rejected), uncomment:
-  # services.grafana.settings.plugins.allow_loading_unsigned_plugins =
-  #   "victoriametrics-logs-datasource";
-
-  # The /var/log/caddy directory is created by hardening.nix (where the
-  # fail2ban jail that reads it is also defined).
 }

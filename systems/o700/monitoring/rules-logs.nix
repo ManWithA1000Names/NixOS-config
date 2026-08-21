@@ -17,7 +17,7 @@
 # Until verified, these rules fire safe-fail: a wrong field name yields no
 # matches, which means no rows, which means no alert -- so a misconfigured
 # log rule causes silence rather than spam.
-{
+_: {
   groups = [
     {
       name = "security-logs";

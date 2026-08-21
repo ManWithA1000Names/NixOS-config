@@ -6,7 +6,7 @@
 #   - fail2ban metric names: curl -s 127.0.0.1:9191/metrics | head -40
 #   - smartctl attribute labels: curl -s 127.0.0.1:9633/metrics | grep Reallocated
 #   - vm_storage_is_read_only: curl -s 127.0.0.1:8428/metrics | grep read_only
-{
+{ PATHS, ... }: {
   groups = [
     {
       name = "host-health";
@@ -218,14 +218,14 @@
       rules = [
         {
           alert = "ExternalSSDUnmounted";
-          expr = ''o700_mount_present{mount="/mnt/ex-ssd"} == 0'';
+          expr = ''o700_mount_present{mount="${PATHS.EX-SSD}"} == 0'';
           "for" = "5m";
           labels.severity = "critical";
-          annotations.summary = "External SSD is not mounted at /mnt/ex-ssd";
+          annotations.summary = "External SSD is not mounted at ${PATHS.EX-SSD}";
         }
         {
           alert = "ExternalSSDLow";
-          expr = ''node_filesystem_avail_bytes{mountpoint="/mnt/ex-ssd"} / node_filesystem_size_bytes{mountpoint="/mnt/ex-ssd"} < 0.10'';
+          expr = ''node_filesystem_avail_bytes{mountpoint="${PATHS.EX-SSD}"} / node_filesystem_size_bytes{mountpoint="${PATHS.EX-SSD}"} < 0.10'';
           "for" = "30m";
           labels.severity = "warning";
           annotations.summary = "External SSD < 10% free";
@@ -276,6 +276,87 @@
           "for" = "30m";
           labels.severity = "critical";
           annotations.summary = "VictoriaLogs has not ingested any rows in 30 min";
+        }
+      ];
+    }
+
+    {
+      # The shipping path is journald -> Vector -> VictoriaLogs. With journald
+      # retention cut to 500M, a break anywhere along it is silent data loss
+      # within hours rather than a recoverable backlog, so each hop gets its
+      # own signal. Vector's process death is covered separately and more
+      # directly by OnFailure= in notify.nix; these cover the ways it stays
+      # alive while not doing its job.
+      name = "log-pipeline";
+      rules = [
+        {
+          # Early warning ahead of VictoriaMetricsReadOnly. By the time that
+          # one fires, ingestion has already stopped. -storage.minFreeDiskSpaceBytes
+          # is 5GB, so 15GB leaves roughly a week of slack at the observed
+          # write rate -- enough to act deliberately rather than at 3am.
+          #
+          # Metric name must be verified:
+          #   curl -s 127.0.0.1:8428/metrics | grep free_disk
+          alert = "VictoriaMetricsDiskLow";
+          expr = "vm_free_disk_space_bytes < 15e9";
+          "for" = "15m";
+          labels.severity = "warning";
+          annotations.summary = "VictoriaMetrics free disk below 15 GB (goes read-only at 5 GB)";
+        }
+        {
+          # Verify: curl -s 127.0.0.1:9428/metrics | grep free_disk
+          alert = "VictoriaLogsDiskLow";
+          expr = "vl_free_disk_space_bytes < 15e9";
+          "for" = "15m";
+          labels.severity = "warning";
+          annotations.summary = "VictoriaLogs free disk below 15 GB (refuses writes at 5 GB)";
+        }
+        {
+          # -storage.maxDiskSpaceUsageBytes is 20GiB. Reaching ~90% of it means
+          # the cap, not retentionPeriod, has become what bounds history: data
+          # is being evicted earlier than 120 days without anything failing.
+          # That is a correctness change worth knowing about, not an outage.
+          #
+          # Verify: curl -s 127.0.0.1:8428/metrics | grep data_size
+          alert = "VictoriaMetricsRetentionTruncated";
+          expr = "sum(vm_data_size_bytes) > 19.3e9";
+          "for" = "1h";
+          labels.severity = "warning";
+          annotations.summary = "VictoriaMetrics near its 20GiB cap -- retention is now shorter than 120d";
+        }
+        {
+          # Same, against -retention.maxDiskSpaceUsageBytes=30GiB.
+          # Verify: curl -s 127.0.0.1:9428/metrics | grep data_size
+          alert = "VictoriaLogsRetentionTruncated";
+          expr = "sum(vl_storage_data_size_bytes) > 29e9";
+          "for" = "1h";
+          labels.severity = "warning";
+          annotations.summary = "VictoriaLogs near its 30GiB cap -- retention is now shorter than 120d";
+        }
+        {
+          # Vector reporting errors on a component: a source that cannot read,
+          # a transform whose VRL is failing per-event, or a sink being
+          # rejected. Any of these drop events while the process stays up and
+          # the unit stays "active", which is the failure mode OnFailure=
+          # cannot catch.
+          alert = "VectorComponentErrors";
+          expr = "sum by(component_id)(rate(vector_component_errors_total[15m])) > 0";
+          "for" = "15m";
+          labels.severity = "warning";
+          annotations.summary = "Vector component {{ $labels.component_id }} is erroring";
+        }
+        {
+          # The disk buffer filling means Vector is reading faster than
+          # VictoriaLogs accepts. Transient during a VictoriaLogs restart --
+          # that is what the buffer is for -- so this only fires if it stays
+          # high. At 1 GiB the buffer blocks, and blocking stalls the journald
+          # reader, at which point the 500M journal is the only thing standing
+          # between a slow sink and lost entries.
+          alert = "VectorBufferBacklog";
+          expr = "sum(vector_buffer_byte_size) > 5e8";
+          "for" = "30m";
+          labels.severity = "warning";
+          annotations.summary = "Vector disk buffer above 500 MB -- VictoriaLogs is not keeping up";
         }
       ];
     }

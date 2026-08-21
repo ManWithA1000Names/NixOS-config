@@ -27,13 +27,21 @@
 
   programs.hyprland = {
     enable = true;
-    xwayland = { enable = true; };
+    xwayland = {
+      enable = true;
+    };
   };
 
   xdg.portal = {
     enable = true;
-    extraPortals = [ pkgs.xdg-desktop-portal-hyprland pkgs.xdg-desktop-portal-gtk ];
-    config.hyprland.default = [ "hyprland" "gtk" ];
+    extraPortals = [
+      pkgs.xdg-desktop-portal-hyprland
+      pkgs.xdg-desktop-portal-gtk
+    ];
+    config.hyprland.default = [
+      "hyprland"
+      "gtk"
+    ];
   };
 
   fonts = {
@@ -46,8 +54,14 @@
       nerd-fonts.fira-code
     ];
     fontconfig.defaultFonts = {
-      serif = [ "Noto Serif" "Source Han Serif" ];
-      sansSerif = [ "Noto Sans" "Source Han Sans" ];
+      serif = [
+        "Noto Serif"
+        "Source Han Serif"
+      ];
+      sansSerif = [
+        "Noto Sans"
+        "Source Han Sans"
+      ];
     };
   };
 

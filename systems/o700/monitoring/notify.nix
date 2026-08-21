@@ -1,29 +1,39 @@
-{ config, pkgs, lib, USERNAME, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 let
   notify-script = pkgs.writeShellApplication {
     name = "telegram-notify";
-    runtimeInputs = with pkgs; [ curl systemd coreutils gnused ];
+    runtimeInputs = with pkgs; [
+      curl
+      systemd
+      coreutils
+      gnused
+    ];
     text = ''
-      unit="''${1:?unit name required}"
+            unit="''${1:?unit name required}"
 
-      # Telegram caps a message at 4096 characters and rejects the whole request
-      # if you exceed it -- so an over-long failure report produces *no* report.
-      # Tail 20 lines then hard-trim to 3000 chars, HTML-escape angle brackets
-      # and ampersands (parse_mode=HTML rejects unescaped ones).
-      if [ "$unit" = "boot" ]; then
-        body="Host started"
-      else
-        body=$(journalctl -u "$unit" -n 20 --no-pager -o cat 2>/dev/null \
-               | tail -c 3000 \
-               | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
-      fi
+            # Telegram caps a message at 4096 characters and rejects the whole request
+            # if you exceed it -- so an over-long failure report produces *no* report.
+            # Tail 20 lines then hard-trim to 3000 chars, HTML-escape angle brackets
+            # and ampersands (parse_mode=HTML rejects unescaped ones).
+            if [ "$unit" = "boot" ]; then
+              body="Host started"
+            else
+              body=$(journalctl -u "$unit" -n 20 --no-pager -o cat 2>/dev/null \
+                     | tail -c 3000 \
+                     | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
+            fi
 
-      curl -sS --max-time 20 --retry 3 --retry-delay 5 \
-        "https://api.telegram.org/bot''${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        --data-urlencode "chat_id=''${TELEGRAM_CHAT_ID}" \
-        -d "parse_mode=HTML" \
-        --data-urlencode "text=<b>o700</b> | <code>$unit</code>
-<pre>$body</pre>"
+            curl -sS --max-time 20 --retry 3 --retry-delay 5 \
+              "https://api.telegram.org/bot''${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=''${TELEGRAM_CHAT_ID}" \
+              -d "parse_mode=HTML" \
+              --data-urlencode "text=<b>o700</b> | <code>$unit</code>
+      <pre>$body</pre>"
     '';
   };
 
@@ -38,7 +48,7 @@ let
     "vmalert-logs"
     "alertmanager"
     "grafana"
-    "systemd-journal-upload"
+    "vector"
     "prometheus-node-exporter"
     "prometheus-blackbox-exporter"
     "prometheus-smartctl-exporter"
@@ -46,7 +56,11 @@ let
     "caddy"
     "sshd"
     "fail2ban"
-    "firewall"
+    # NOT "firewall": with networking.nftables.enable the ruleset is loaded by
+    # nftables.service and firewall.service does not exist. Naming a
+    # non-existent unit here does not fail loudly -- it synthesises an empty
+    # unit that can never fire, so the notification silently never arrives.
+    "nftables"
     "dnsmasq"
     "dnscrypt-proxy"
     "vaultwarden"
@@ -55,7 +69,9 @@ let
     "nfs-server"
     "node-exporter-facts"
   ];
-in {
+  # TODO: Determine all ctritical units (add to seta?)
+in
+{
   systemd.services =
     # Wire every critical unit to call the template on failure.
     # %n expands to the full unit name including .service suffix.
