@@ -12,7 +12,12 @@
 #
 #   3. Verify threshold semantics: does vmalert fire when the stats query
 #      returns a row, or only when the value > 0? Test with one rule first.
-#      If vmalert fires on any returned row, drop the `| filter c > N` clause.
+#      If vmalert fires on any returned row, drop the `| filter c:>N` clause.
+#
+# Comparison syntax note: LogsQL writes range filters as `field:>N`, not
+# `field > N`. The bare form parses as a word and vmalert refuses to start with
+# "missing ':' in front of '>'" -- which takes the whole instance down, not just
+# the one rule, since the config is parsed as a unit.
 #
 # Until verified, these rules fire safe-fail: a wrong field name yields no
 # matches, which means no rows, which means no alert -- so a misconfigured
@@ -33,13 +38,13 @@ _: {
           # SSH failed authentication: high volume in a short window.
           # Field name _SYSTEMD_UNIT must match what VictoriaLogs actually
           # stores -- verify with the query above before tuning the threshold.
-          expr = ''_time:10m _SYSTEMD_UNIT:"sshd.service" "Failed password" | stats count() as c | filter c > 20'';
+          expr = ''_time:10m _SYSTEMD_UNIT:"sshd.service" "Failed password" | stats count() as c | filter c:>20'';
           labels.severity = "warning";
           annotations.summary = "> 20 SSH authentication failures in the last 10 min";
         }
         {
           alert = "SudoAuthFailure";
-          expr = ''_time:10m SYSLOG_IDENTIFIER:"sudo" "authentication failure" | stats count() as c | filter c > 3'';
+          expr = ''_time:10m SYSLOG_IDENTIFIER:"sudo" "authentication failure" | stats count() as c | filter c:>3'';
           labels.severity = "warning";
           annotations.summary = "> 3 sudo authentication failures in the last 10 min";
         }
@@ -47,7 +52,11 @@ _: {
           alert = "PAMAuthFailureBurst";
           # Catches authentication failures from any PAM-using service (su, login,
           # screensaver unlock) that does not have its own jail.
-          expr = ''_time:10m SYSLOG_IDENTIFIER:"(sshd|login|su)" "authentication failure" | stats count() as c | filter c > 10'';
+          # in(...) rather than "(sshd|login|su)": LogsQL has no regex alternation
+          # inside a quoted value, so that form matched the literal string and
+          # silently never fired -- the exact safe-fail silence warned about at
+          # the top of this file.
+          expr = ''_time:10m SYSLOG_IDENTIFIER:in("sshd", "login", "su") "authentication failure" | stats count() as c | filter c:>10'';
           labels.severity = "warning";
           annotations.summary = "> 10 PAM authentication failures in the last 10 min";
         }
