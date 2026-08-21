@@ -67,6 +67,21 @@
           enforce_domain = true;
         };
         security = {
+          # 26.05 removed the hard-coded default key. $__file{} is grafana's
+          # own indirection, not Nix's: the literal string below is what lands
+          # in grafana.ini, and grafana opens the path at startup. Interpolating
+          # the secret's *contents* here instead would write the key into the
+          # world-readable nix store.
+          #
+          # This key encrypts secrets at rest in grafana's DB -- datasource
+          # secureJsonData, contact-point tokens. Nothing here has any yet (both
+          # datasources are unauthenticated loopback URLs, provisioned
+          # declaratively), so the first deploy has nothing to lose. Once that
+          # stops being true, rotating this key strands whatever was encrypted
+          # under the old one: grafana has no supported rotation path, so it
+          # would mean re-entering those secrets by hand.
+          secret_key = "$__file{${config.age.secrets.grafana-secret-key.path}}";
+
           cookie_secure = true;
           cookie_samesite = "strict";
           disable_gravatar = true;
