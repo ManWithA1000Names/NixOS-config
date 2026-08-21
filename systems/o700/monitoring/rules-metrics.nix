@@ -74,10 +74,24 @@
           annotations.summary = "CPU/GPU temperature > 85 C";
         }
         {
-          alert = "UnexpectedReboot";
+          # Named for what it can actually prove. node_boot_time_seconds is the
+          # kernel's boot timestamp and nothing more: a clean reboot, a kernel
+          # panic and a power cut are byte-identical to this query. It was
+          # called UnexpectedReboot, which claimed a distinction the expression
+          # cannot make and made every intentional reboot look like an incident.
+          #
+          # info rather than warning for the same reason -- this is a fact to
+          # correlate against when reading other alerts, not something to act
+          # on. An genuinely unplanned reboot is never silent anyway: it
+          # arrives as ScrapeTargetDown, ProbeFailed and SystemdUnitFailed.
+          #
+          # Making it mean what the old name said needs a clean-shutdown stamp
+          # written to the textfile collector before shutdown.target, then
+          # comparing boot time against it.
+          alert = "HostRebooted";
           expr = "changes(node_boot_time_seconds[1h]) > 0";
           "for" = "0m";
-          labels.severity = "warning";
+          labels.severity = "info";
           annotations.summary = "Host rebooted";
         }
         {
