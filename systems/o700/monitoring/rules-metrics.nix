@@ -74,25 +74,37 @@
           annotations.summary = "CPU/GPU temperature > 85 C";
         }
         {
-          # Named for what it can actually prove. node_boot_time_seconds is the
-          # kernel's boot timestamp and nothing more: a clean reboot, a kernel
-          # panic and a power cut are byte-identical to this query. It was
-          # called UnexpectedReboot, which claimed a distinction the expression
-          # cannot make and made every intentional reboot look like an incident.
+          # Named for the information this message actually adds. That the host
+          # booted is already known: telegram-boot-notice.service says so within
+          # seconds, straight from the host, depending on nothing but network.
+          # This one has to cross node-exporter -> VictoriaMetrics -> vmalert ->
+          # Alertmanager -> Telegram to arrive at all, which is why it lands
+          # minutes later. Its arrival is therefore an end-to-end proof that the
+          # whole notification path survived the reboot; the reboot itself is
+          # just the trigger that happens to be available.
           #
-          # info rather than warning for the same reason -- this is a fact to
-          # correlate against when reading other alerts, not something to act
-          # on. An genuinely unplanned reboot is never silent anyway: it
-          # arrives as ScrapeTargetDown, ProbeFailed and SystemdUnitFailed.
+          # Scoped deliberately to "smoke test" and not something like
+          # AlertStackFunctional: it proves the path worked once, at boot. It
+          # cannot say anything about the days between boots, because a stack
+          # that dies quietly on day 40 produces no message -- and a green
+          # message that fails to arrive is not something you notice. Continuous
+          # coverage would need a dead-man's-switch on a host that is not this
+          # one, so that the absence of a heartbeat is what pages.
           #
-          # Making it mean what the old name said needs a clean-shutdown stamp
-          # written to the textfile collector before shutdown.target, then
-          # comparing boot time against it.
-          alert = "HostRebooted";
+          # info, not warning: nothing here needs acting on, and a genuinely
+          # unplanned reboot is never silent anyway -- it arrives as
+          # ScrapeTargetDown, ProbeFailed and SystemdUnitFailed.
+          #
+          # node_boot_time_seconds is the kernel's boot timestamp and nothing
+          # more, so a clean reboot, a kernel panic and a power cut are
+          # byte-identical to this query. Distinguishing them is a separate
+          # alert, and needs a clean-shutdown stamp written to the textfile
+          # collector before shutdown.target, compared against boot time.
+          alert = "AlertPipelineSmokeTest";
           expr = "changes(node_boot_time_seconds[1h]) > 0";
           "for" = "0m";
           labels.severity = "info";
-          annotations.summary = "Host rebooted";
+          annotations.summary = "Alert pipeline reached Telegram end-to-end after boot";
         }
         {
           alert = "ClockDrift";
