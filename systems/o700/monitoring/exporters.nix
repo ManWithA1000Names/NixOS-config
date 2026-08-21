@@ -146,7 +146,22 @@
               "127.0.0.1:${toString PORTS.VMALERT_METRICS}"
               "127.0.0.1:${toString PORTS.VMALERT_LOGS}"
               "127.0.0.1:${toString PORTS.ALERT_MANAGER}"
-              "127.0.0.1:${toString PORTS.GRAFANA}"
+              # Grafana is deliberately absent. Its /metrics is unscrapeable
+              # here for two independent reasons: enforce_domain 301-redirects
+              # anything whose Host is not grafana.o700.net (so a loopback
+              # target is rejected before auth is even considered), and Grafana
+              # 13 puts /metrics behind the session auth middleware, which
+              # 302s to /login.
+              #
+              # Fixing both would mean a shared-readable secret for
+              # [metrics] basic_auth plus a dedicated scrape job -- machinery
+              # bought for metrics nobody here consumes. Grafana's liveness is
+              # already covered twice: node_systemd_unit_state via the systemd
+              # collector, and the blackbox probe of https://grafana.o700.net/.
+              # What is lost is only Grafana's internal instrumentation
+              # (render times, session counts). Restore by setting
+              # [metrics] basic_auth_username/password and giving the scrape
+              # job matching basic_auth credentials.
             ];
           }
         ];
