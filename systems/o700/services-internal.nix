@@ -119,14 +119,6 @@
         cache-size = 1000;
         domain-needed = true;
         bogus-priv = true;
-
-        # Query log routed to a file rather than the journal. At LAN scale
-        # this is thousands of entries per hour; shipping them through the
-        # journal to VictoriaLogs would dominate its retention budget. The
-        # file is still there for debugging strange client behaviour:
-        #   journalctl -f --file /var/log/dnsmasq/queries.log  (or just tail)
-        log-queries = true;
-        log-facility = "/var/log/dnsmasq/queries.log";
       };
     };
 
