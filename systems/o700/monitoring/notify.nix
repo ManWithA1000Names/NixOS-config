@@ -99,10 +99,28 @@ in
       telegram-boot-notice = {
         description = "Send Telegram notification on boot";
         wantedBy = [ "multi-user.target" ];
-        after = [ "network-online.target" ];
+        after = [
+          # network-online.target only means an interface has an address. It
+          # says nothing about a resolver answering, which is what curl needs.
+          "network-online.target"
+          # dnsmasq is this host's only resolver (networking.nix), and unlike
+          # dnscrypt-proxy it does NOT declare Before=nss-lookup.target -- so
+          # ordering on that target would look correct and skip the very unit
+          # that matters. Naming it directly is the only ordering that holds,
+          # and it covers dnscrypt-proxy transitively since dnsmasq is After= it.
+          "dnsmasq.service"
+        ];
         wants = [ "network-online.target" ];
         serviceConfig = {
           Type = "oneshot";
+          # A oneshot without this returns to "inactive (dead)" the instant it
+          # succeeds, so every `nixos-rebuild switch` finds a wanted unit that
+          # is not running and starts it again. That produced "Host started"
+          # messages for a host that never started, and raced dnsmasq being
+          # restarted in the same transaction -- the resolve failures that left
+          # this unit failed. Staying "active (exited)" makes it fire once per
+          # boot, which is what the name claims.
+          RemainAfterExit = true;
           EnvironmentFile = config.age.secrets.alerting.path;
           ExecStart = "${lib.getExe notify-script} boot";
         };
