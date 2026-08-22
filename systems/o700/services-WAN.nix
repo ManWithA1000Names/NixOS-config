@@ -1,5 +1,4 @@
 {
-  pkgs,
   config,
   PORTS,
   DOMAIN,
@@ -48,78 +47,6 @@
         service.DISABLE_REGISTRATION = true;
       };
     };
-
-    grafana = {
-      enable = true;
-
-      # services.grafana.settings.plugins.allow_loading_unsigned_plugins =
-      #   "victoriametrics-logs-datasource";
-      declarativePlugins = with pkgs.grafanaPlugins; [
-        victoriametrics-logs-datasource
-      ];
-
-      settings = {
-        server = rec {
-          http_addr = "127.0.0.1";
-          http_port = PORTS.GRAFANA;
-          domain = "${config.seta.grafana.proxy.domain}";
-          root_url = "https://${domain}";
-          enforce_domain = true;
-        };
-        security = {
-          # 26.05 removed the hard-coded default key. $__file{} is grafana's
-          # own indirection, not Nix's: the literal string below is what lands
-          # in grafana.ini, and grafana opens the path at startup. Interpolating
-          # the secret's *contents* here instead would write the key into the
-          # world-readable nix store.
-          #
-          # This key encrypts secrets at rest in grafana's DB -- datasource
-          # secureJsonData, contact-point tokens. Nothing here has any yet (both
-          # datasources are unauthenticated loopback URLs, provisioned
-          # declaratively), so the first deploy has nothing to lose. Once that
-          # stops being true, rotating this key strands whatever was encrypted
-          # under the old one: grafana has no supported rotation path, so it
-          # would mean re-entering those secrets by hand.
-          secret_key = "$__file{${config.age.secrets.grafana-secret-key.path}}";
-
-          cookie_secure = true;
-          cookie_samesite = "strict";
-          disable_gravatar = true;
-          content_security_policy = true;
-          strict_transport_security = true;
-        };
-        analytics = {
-          reporting_enabled = false;
-          check_for_updates = false;
-        };
-        users.allow_sign_up = false;
-        # Quoted: this is the literal INI section name `[auth.anonymous]`, not
-        # an `anonymous` key inside an `auth` section. Unquoted, Nix's dot
-        # syntax nests it and the generator rejects the attrset as a value.
-        "auth.anonymous".enabled = false;
-      };
-
-      provision = {
-        enable = true;
-        datasources.settings = {
-          apiVersion = 1;
-          datasources = [
-            {
-              name = "VictoriaMetrics";
-              type = "prometheus";
-              uid = "vm";
-              url = "http://127.0.0.1:${toString PORTS.VICTORIA_METRICS}";
-            }
-            {
-              name = "VictoriaLogs";
-              type = "victoriametrics-logs-datasource";
-              uid = "vl";
-              url = "http://127.0.0.1:${toString PORTS.VICTORIA_LOGS}";
-            }
-          ];
-        };
-      };
-    };
   };
 
   seta = {
@@ -153,23 +80,6 @@
         enable = true;
         port = PORTS.GITEA;
         domain = "git.${DOMAIN}";
-        exposure = "WAN";
-      };
-    };
-
-    grafana = {
-      dashboard = {
-        enable = true;
-        name = "Grafana";
-        description = "Metrics & logs dashboard";
-        group = "Monitoring";
-        icon = "grafana.png";
-      };
-
-      proxy = {
-        enable = true;
-        port = PORTS.GRAFANA;
-        domain = "grafana.${DOMAIN}";
         exposure = "WAN";
       };
     };

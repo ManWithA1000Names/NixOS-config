@@ -39,20 +39,14 @@ let
 
   # Critical units whose failure must reach Telegram even -- especially --
   # when the monitoring stack itself is what failed. The OnFailure= wiring
-  # below means a dead VictoriaMetrics triggers the notifier directly via
-  # systemd, bypassing vmalert and Alertmanager entirely.
+  # below means a dead Netdata triggers the notifier directly via systemd,
+  # bypassing Netdata's own alarm delivery entirely.
+  #
+  # This path is now load-bearing in a way it was not before. Netdata's health
+  # engine covers thresholds -- disk, memory, pressure -- but it cannot report
+  # its own death, and there is no longer a second alerting system to notice.
   criticalUnits = [
-    "victoriametrics"
-    "victorialogs"
-    "vmalert-metrics"
-    "vmalert-logs"
-    "alertmanager"
-    "grafana"
-    "vector"
-    "prometheus-node-exporter"
-    "prometheus-blackbox-exporter"
-    "prometheus-smartctl-exporter"
-    "prometheus-fail2ban-exporter"
+    "netdata"
     "caddy"
     "sshd"
     "fail2ban"
@@ -67,7 +61,10 @@ let
     "backup-vaultwarden"
     "gitea"
     "nfs-server"
-    "node-exporter-facts"
+    # Not a service that can crash so much as one that reports by failing: the
+    # audit exits non-zero when it finds something, so OnFailure here is the
+    # delivery path for its findings, not just for its own breakage.
+    "host-audit"
   ];
   # TODO: Determine all ctritical units (add to seta?)
 in

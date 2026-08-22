@@ -58,8 +58,8 @@ let
       # months to reverse; plain max-age is revocable by lowering it.
       Strict-Transport-Security "max-age=31536000; includeSubDomains"
       X-Content-Type-Options nosniff
-      # SAMEORIGIN rather than DENY: Grafana panel embedding and Jellyfin's
-      # web client both frame same-origin content, which DENY would break.
+      # SAMEORIGIN rather than DENY: Netdata's dashboard and Jellyfin's web
+      # client both frame same-origin content, which DENY would break.
       X-Frame-Options SAMEORIGIN
       Referrer-Policy strict-origin-when-cross-origin
       # Caddy sends no version, but no reason to name the software either.
@@ -79,7 +79,7 @@ let
       # service claims. An outside scanner therefore cannot distinguish a
       # LAN-only service from a name that does not exist, where 403 would
       # confirm it is there and worth coming back to. The request is logged
-      # either way, so blocked attempts remain visible in VictoriaLogs, and
+      # either way, so blocked attempts remain visible in the journal, and
       # the caddy-scan jail below counts them.
       guard = lib.optionalString (sources != [ ]) ''
         @blocked not remote_ip ${lib.concatStringsSep " " sources}
@@ -279,8 +279,11 @@ in
         # also puts each accepted login's key fingerprint into the journal, which
         # is what makes "somebody logged in with an unrecognised key" answerable.
 
-        # MUST stay yes: ssh -L is the only access path for VictoriaMetrics,
-        # VictoriaLogs, Alertmanager, both vmalerts and every exporter.
+        # ssh -L is the only access path to anything bound to loopback. Netdata
+        # is reachable through Caddy on the LAN, so this is no longer the sole
+        # route to the monitoring UI -- but it is still how a loopback listener
+        # gets looked at from off-host, which is the whole point of binding them
+        # there.
         AllowTcpForwarding = "yes";
       };
     };
@@ -419,7 +422,6 @@ in
       globalConfig = ''
         acme_dns cloudflare {env.CF_API_TOKEN}
         tls_resolvers ${IP.cloudflare-dns}
-        metrics { per_host }
       '';
 
       virtualHosts =
@@ -431,10 +433,17 @@ in
             ${proxy.domain} = {
               extraConfig = vhostConfig proxy;
 
-              # Every vhost, unconditionally: stderr -> journal -> Vector ->
-              # VictoriaLogs. There is no per-service switch because a request
-              # that was not recorded is indistinguishable from one that never
-              # happened, which is precisely the gap an attacker benefits from.
+              # Every vhost, unconditionally: stderr -> journal, which is now
+              # where these stay rather than being a waypoint to a log store.
+              # There is no per-service switch because a request that was not
+              # recorded is indistinguishable from one that never happened,
+              # which is precisely the gap an attacker benefits from.
+              #
+              # This is also the single largest write source on the root disk --
+              # roughly 65 lines a minute, every one of them fsynced by journald
+              # and re-read by two fail2ban jails. If disk contention becomes a
+              # problem again, narrowing this (rather than dropping it) is the
+              # first thing to reach for.
               #
               # This string is spliced into a `log { }` block by the caddy
               # module, and it replaces the module's default wholesale. The

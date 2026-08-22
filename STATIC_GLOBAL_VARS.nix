@@ -29,7 +29,6 @@ let
       CADDY_HTTPS = 443;
       CADDY_ADMIN = 2019;
       NFS = 2049;
-      GRAFANA = 3000;
       KAVITA = 5000;
       DNSCRYPT = 5335;
       MDNS = 5353;
@@ -42,19 +41,10 @@ let
       MEALIE = 8002;
       QBITTORRENT = 8080;
       JELLYFIN = 8096;
-      VICTORIA_METRICS = 8428;
-      VMALERT_METRICS = 8880;
-      VMALERT_LOGS = 8881;
       SONARR = 8989;
-      ALERT_MANAGER = 9093;
-      NODE = 9100;
-      BLACKBOX = 9115;
-      FAIL2BAN = 9191;
-      VICTORIA_LOGS = 9428;
-      VECTOR = 9598;
-      SMARTCTL = 9633;
       PROWLARR = 9696;
       VAULTWARDEN = 9999;
+      NETDATA = 19999;
       PAPERLESS = 28981;
       QBITTORRENT_TORRENT = 44995;
     };

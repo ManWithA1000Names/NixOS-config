@@ -8,5 +8,5 @@ in
 {
   "cloudflare-dns-api.age".publicKeys = systems ++ users;
   "alerting.age".publicKeys = systems ++ users;
-  "grafana-secret-key.age".publicKeys = systems ++ users;
+  "netdata-basicauth.age".publicKeys = systems ++ users;
 }
