@@ -8,10 +8,12 @@ _: {
   # ---------------------------------------------------------------------------
   # Journald
   #
-  # The journal is now the log store, not a staging area. Nothing copies it
-  # anywhere -- Netdata's systemd-journal plugin queries these files in place
-  # when the dashboard asks, which is the whole reason the previous shipping
-  # pipeline (Vector -> VictoriaLogs) could be deleted rather than replaced.
+  # The journal is the log store, not a staging area. Nothing copies it
+  # anywhere and nothing writes a second copy to this disk.
+  #
+  # It is also the *only* store: Netdata's systemd-journal plugin is disabled
+  # (monitoring/netdata.nix explains why), so there is no web view of these
+  # files. They are read with journalctl over SSH.
   #
   # The practical consequence is that these two numbers now set log retention
   # outright. There is no second copy to fall back on.

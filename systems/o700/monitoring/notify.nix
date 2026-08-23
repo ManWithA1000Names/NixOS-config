@@ -14,26 +14,57 @@ let
       gnused
     ];
     text = ''
-            unit="''${1:?unit name required}"
+      unit="''${1:?unit name required}"
 
-            # Telegram caps a message at 4096 characters and rejects the whole request
-            # if you exceed it -- so an over-long failure report produces *no* report.
-            # Tail 20 lines then hard-trim to 3000 chars, HTML-escape angle brackets
-            # and ampersands (parse_mode=HTML rejects unescaped ones).
-            if [ "$unit" = "boot" ]; then
-              body="Host started"
-            else
-              body=$(journalctl -u "$unit" -n 20 --no-pager -o cat 2>/dev/null \
-                     | tail -c 3000 \
-                     | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
-            fi
+      if [ "$unit" = "boot" ]; then
+        verdict=""
+        body="Host started"
+      else
+        # `-u` matches two different things: lines written by the service
+        # process, and PID 1's commentary *about* the unit -- "Starting...",
+        # "Main process exited", "Consumed 1.8s CPU time over 19.6s wall clock",
+        # "Triggering OnFailure=". The second kind crowds out the first, so a
+        # one-line finding arrives buried in five lines of lifecycle noise.
+        # Matching _SYSTEMD_UNIT= selects only the process's own output, which
+        # is the part that says what actually happened.
+        body=$(journalctl _SYSTEMD_UNIT="$unit" -n 30 --no-pager -o cat 2>/dev/null \
+               | tail -c 2500 \
+               | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g') || body=""
+        # A unit that is killed usually logs nothing, and an empty <pre> reads
+        # as a broken notifier rather than as silence from the service.
+        [ -n "$body" ] || body="no output on this invocation"
 
-            curl -sS --max-time 20 --retry 3 --retry-delay 5 \
-              "https://api.telegram.org/bot''${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              --data-urlencode "chat_id=''${TELEGRAM_CHAT_ID}" \
-              -d "parse_mode=HTML" \
-              --data-urlencode "text=<b>o700</b> | <code>$unit</code>
-      <pre>$body</pre>"
+        # systemd's own verdict, as structured data rather than prose scraped
+        # from the lines dropped above. Result is what separates a unit that
+        # exited non-zero deliberately -- host-audit reports its findings that
+        # way -- from one that was killed: signal, oom-kill, timeout,
+        # core-dump. Without it every failure reads identically.
+        result=$(systemctl show "$unit" --property=Result --value 2>/dev/null) || result=""
+        status=$(systemctl show "$unit" --property=ExecMainStatus --value 2>/dev/null) || status=""
+        verdict="''${result:-unknown} · status ''${status:-?}"
+      fi
+
+      # Telegram caps a message at 4096 characters and rejects the entire
+      # request past that, so an over-long report produces *no* report. The
+      # 2500-char trim above leaves room for the header, verdict and tags.
+      #
+      # printf builds this rather than a multi-line Nix literal: the newlines
+      # are load-bearing, and a Nix indented string only strips indentation
+      # down to the common prefix, so the rest would be sent to Telegram as
+      # part of the message.
+      if [ -n "$verdict" ]; then
+        message=$(printf '<b>o700</b> | <code>%s</code>\n%s\n<pre>%s</pre>' \
+                  "$unit" "$verdict" "$body")
+      else
+        message=$(printf '<b>o700</b> | <code>%s</code>\n<pre>%s</pre>' \
+                  "$unit" "$body")
+      fi
+
+      curl -sS --max-time 20 --retry 3 --retry-delay 5 \
+        "https://api.telegram.org/bot''${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=''${TELEGRAM_CHAT_ID}" \
+        -d "parse_mode=HTML" \
+        --data-urlencode "text=$message"
     '';
   };
 

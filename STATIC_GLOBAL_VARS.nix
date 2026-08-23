@@ -34,7 +34,6 @@ let
       MDNS = 5353;
       RESOLVED = 5355;
       SEERR = 5055;
-      BAZARR = 6767;
       RADARR = 7878;
       DASHBOARD = 8000;
       GITEA = 8001;

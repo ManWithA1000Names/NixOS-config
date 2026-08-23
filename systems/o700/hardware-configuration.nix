@@ -74,12 +74,33 @@
     };
   };
 
-  swapDevices = [
-    {
-      device = "/var/lib/swapfile";
-      size = 16 * 1024; # 16 GiB
-    }
-  ];
+  # Deliberately empty, and it must stay that way unless the storage layout
+  # changes. A 16 GiB swapfile lived at /var/lib/swapfile between 3576421 and
+  # 2026-08-23. /var is on /, so that put the paging path on the 7200 RPM
+  # spindle that also carries /nix/store.
+  #
+  # The failure mode: qBittorrent writing to the external SSD at 80+ MiB/s
+  # fills the page cache, and at the default vm.swappiness of 60 the kernel
+  # answers that pressure by evicting cold anonymous pages -- on an otherwise
+  # idle server, that is sshd's listener, PAM and the login path. Faulting
+  # them back in is 4K random reads from a spindle, which measured 6.2s of
+  # disk backlog and 40% iowait while the disk moved only 1.6 MB/s. It
+  # presented as "the host is unreachable during downloads", and it took the
+  # NIC down with it: no free pages to allocate skbs into means the RX ring
+  # stops being refilled, so ~10k FIFO errors and 110 TCP resets/s were
+  # downstream of this, not separate faults.
+  #
+  # With no swap the kernel's only reclaim target is clean page cache, which
+  # is free to drop and keeps sshd resident by construction. Confirmed by
+  # differential test: swap off, same download, 80 MiB/s sustained with every
+  # service responsive.
+  #
+  # It was added as part of the VictoriaMetrics/VictoriaLogs/Vector rewrite,
+  # presumably for that stack's headroom. The stack was removed in d4290cc;
+  # the swapfile outlived its reason by two days. If an overflow reserve is
+  # ever genuinely needed, zram is the option that does not touch this disk --
+  # anything backed by the spindle reintroduces exactly the above.
+  swapDevices = [ ];
 
   systemd = {
     # The external SSD is shared by Jellyfin, the media stack and the NFS
@@ -106,7 +127,6 @@
           "jellyfin"
           "sonarr"
           "radarr"
-          "bazarr"
           "qbittorrent"
           "backup-vaultwarden"
           # There is exactly one export and it lives on the SSD. Refusing to start

@@ -8,11 +8,15 @@
 }:
 {
   services = {
-    bazarr = {
-      enable = true;
-      group = MEDIA_GROUP;
-      listenPort = PORTS.BAZARR;
-    };
+    # Bazarr (subtitle fetching for the Arr stack) is deliberately absent: it
+    # was never used, and it is not free to leave running -- ~111 threads and
+    # the memory that implies, held whether or not anything ever asks it for a
+    # subtitle. An unused daemon with a standing cost is the cheapest thing on
+    # this host to remove.
+    #
+    # Four places changed, so re-adding it means restoring all four: this
+    # block, a seta.bazarr proxy, PORTS.BAZARR in STATIC_GLOBAL_VARS.nix, and
+    # its RequiresMountsFor entry in hardware-configuration.nix.
 
     prowlarr = {
       enable = true;
@@ -119,6 +123,20 @@
         cache-size = 1000;
         domain-needed = true;
         bogus-priv = true;
+
+        # Query log routed to a file rather than the journal. At LAN scale this
+        # is thousands of entries per hour, and the journal is now the log store
+        # itself rather than a staging area -- entries aging out of the 10G cap
+        # in monitoring.nix are gone outright, and fail2ban reads that same
+        # journal, so crowding it out costs bans rather than just history.
+        #
+        # log-facility alone would only move the destination; log-queries is
+        # what enables the logging at all, and dnsmasq defaults it off. Both are
+        # needed. The file is there for debugging strange client behaviour, and
+        # for answering "did this host resolve X" after the fact:
+        #   journalctl -f --file /var/log/dnsmasq/queries.log  (or just tail)
+        log-queries = true;
+        log-facility = "/var/log/dnsmasq/queries.log";
       };
     };
 
@@ -155,15 +173,6 @@
   };
 
   seta = {
-    bazarr = {
-      proxy = {
-        enable = true;
-        port = PORTS.BAZARR;
-        domain = "bazarr-internal.${DOMAIN}";
-        exposure = "NONE";
-      };
-    };
-
     prowlarr = {
       proxy = {
         enable = true;

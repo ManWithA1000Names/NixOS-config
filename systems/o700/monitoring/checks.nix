@@ -67,7 +67,14 @@ let
       # regenerated from config. An unexplained one is not. Comparing against a
       # stored baseline rather than exporting a digest means the alert names the
       # event instead of requiring somebody to notice a number moved.
-      keys="/etc/ssh/authorized_keys/${USERNAME}"
+      # The `.d` is load-bearing: users.users.<n>.openssh.authorizedKeys.keys
+      # materialises at /etc/ssh/authorized_keys.d/<user>, and sshd is pointed
+      # there via AuthorizedKeysFile. This read /etc/ssh/authorized_keys/<user>
+      # until 2026-08-23, which has never existed -- so the else branch below
+      # ran every day, the baseline was never written, and this check had never
+      # once compared anything. A wrong path here fails as a daily nuisance
+      # message rather than as an obvious break, which is why it survived.
+      keys="/etc/ssh/authorized_keys.d/${USERNAME}"
       if [ -f "$keys" ]; then
         digest=$(sha256sum "$keys" | cut -d' ' -f1)
         baseline="${stateDir}/authorized_keys.digest"
@@ -105,9 +112,11 @@ in
       # root filesystem looking for SUID bits.
       #
       # The predecessor of this unit ran the same filesystem walk every five
-      # minutes, which on a 7200 RPM root disk holding /nix/store, the swapfile
-      # and 16 GB of Jellyfin metadata was a meaningful share of the contention
-      # that took this host down. Daily is 288x less of it.
+      # minutes, which on a 7200 RPM root disk holding /nix/store and 16 GB of
+      # Jellyfin metadata was a meaningful share of the contention that took
+      # this host down. Daily is 288x less of it. (That disk also held a
+      # swapfile at the time, since removed -- it turned out to be the larger
+      # share by far.)
       #
       # Nice only affects CPU, and IOSchedulingClass is honoured by BFQ but
       # ignored by mq-deadline, which is the likely scheduler here -- so treat

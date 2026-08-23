@@ -9,13 +9,25 @@
   # ---------------------------------------------------------------------------
   # Netdata
   #
-  # Replaces VictoriaMetrics + VictoriaLogs + Vector + two vmalert instances +
-  # Alertmanager + four exporters + Grafana. The decisive difference is not the
-  # process count: it is that nothing here *ships* anything. Netdata reads
-  # /proc and the journal on demand, so the steady-state write load is its own
-  # dbengine and nothing else. The old stack wrote every journal entry to disk
-  # a second time (Vector's 1 GiB buffer) and a third (VictoriaLogs), on the
-  # 7200 RPM spindle that also holds /nix/store and the swapfile.
+  # Nothing here *ships* anything: Netdata reads /proc on demand, so the
+  # steady-state write load is its own dbengine and nothing else. That property
+  # is the whole point on this host -- / and /nix/store share a 7200 RPM spindle,
+  # and contention on it has taken the machine down twice: once from this stack's
+  # predecessor writing every journal entry twice, and once from a swapfile that
+  # used to sit on the same disk (see swapDevices in hardware-configuration.nix).
+  # Anything that writes a second copy of data which already exists is
+  # disqualified on this hardware.
+  #
+  # This is a metrics-only deployment. Netdata's log side -- the systemd-journal
+  # browser -- is a "Function", and every Function is gated: /api/v3/functions
+  # reports `access: [signed-in, same-space, sensitive-data]` on all of them and
+  # an anonymous request gets HTTP 412, over loopback as well as through Caddy.
+  # The gate is agent-side and has no configuration key, because the agent ships
+  # no local identity provider at all -- bearer tokens are stamped with a cloud
+  # account id and can only be minted by Netdata Cloud over the ACLK, so there
+  # is nothing here that could ever grant `signed-in`. Charts, alarms, ML
+  # anomaly detection, PSI and cgroups are all ANONYMOUS_DATA and unaffected.
+  # Logs are read with journalctl over SSH; see the [plugins] block below.
   # ---------------------------------------------------------------------------
 
   services.netdata = {
@@ -31,27 +43,52 @@
     # allowUnfree in systems/common/nix.nix.
     package = pkgs.netdataCloud;
 
-    # The three things this host actually needs -- the journal browser, PSI and
-    # cgroup metrics, and per-app resource usage -- are all C plugins. python.d
-    # is a separate interpreter running a scheduler for collectors this host has
-    # nothing for (postgres, nvidia-smi, ceph...). Every other plugin is left at
-    # its default: the point of this rewrite was to stop guessing at what is
-    # heavy, so anything else gets disabled only after it is measured doing
-    # damage.
+    # The two things this host actually needs -- PSI and cgroup metrics, and
+    # per-app resource usage -- are both C plugins. python.d is a separate
+    # interpreter running a scheduler for collectors this host has nothing for
+    # (postgres, nvidia-smi, ceph...). Apart from systemd-journal below, every
+    # other plugin is left at its default: the point of this rewrite was to stop
+    # guessing at what is heavy, so anything else gets disabled only after it is
+    # measured doing damage.
     python.enable = false;
 
     config = {
+      plugins = {
+        # Disabled because what it exists to serve cannot be reached. The
+        # journal browser is a Function, and Functions need a Netdata Cloud
+        # bearer this host will never hold (see the header). Left enabled it is
+        # a process opening journal files to answer requests that always return
+        # 412, and a dashboard entry advertising a feature that is not there.
+        #
+        # The key is the plugin filename with `.plugin` stripped: plugins_d.c
+        # looks up [plugins] by exactly that name when it scans the plugin
+        # directory, so `systemd-journal` disables systemd-journal.plugin.
+        "systemd-journal" = "no";
+      };
+
       web = {
         # Netdata binds `*` by default -- every interface including the globally
         # routable IPv6 address. The agent dashboard has no authentication of
-        # its own and the journal browser is part of it, so an unbound listener
-        # publishes this host's logs. Caddy is the only path in; the firewall
-        # dropping the port is the second layer rather than the only one.
+        # its own -- none whatsoever; the Sign in button delegates entirely to
+        # Netdata Cloud -- so an unbound listener hands this host's full metric
+        # history to anyone who finds the port. Caddy is the only path in; the
+        # firewall dropping the port is the second layer rather than the only
+        # one.
         "bind to" = "127.0.0.1:${toString PORTS.NETDATA}";
       };
 
       db = {
         mode = "dbengine";
+
+        # 1s is the default and it is oversampling for this host. Most of what
+        # matters here is already an average over a longer window -- the kernel
+        # exposes PSI as 10s/60s/300s figures, so reading it every second
+        # returns the same number five times -- and the rest moves slowly
+        # enough that 5s resolution costs nothing diagnostically. Collection
+        # scales directly with this number: /proc parsing, compression and
+        # dbengine flushes all drop roughly fivefold, which is the point on a
+        # spindle that has taken this host down once already.
+        "update every" = 5;
 
         # One tier, not the default three. Tiers exist to keep years of
         # downsampled history; the question this host needs answered is "what
@@ -59,10 +96,13 @@
         # set of files being flushed to the same spindle.
         "storage tiers" = 1;
 
-        # Hard cap. Unlike VictoriaMetrics -- which had no byte-budget flag at
-        # all, so a cardinality explosion could grow unbounded -- dbengine
-        # evicts oldest-first to stay under this. At the default 1s collection
-        # rate this is on the order of a week for this host's chart count.
+        # Hard cap: dbengine evicts oldest-first to stay under it, so a
+        # cardinality explosion costs retention rather than growing unbounded
+        # and taking the root filesystem with it. Being a *byte* budget, it
+        # interacts with the rate above -- a fifth as many points per metric
+        # stretches the same 512MiB about five times further, so at 5s this is
+        # on the order of a month for this host's chart count rather than the
+        # week it held at 1s.
         "dbengine tier 0 retention size" = "512MiB";
       };
 
@@ -109,7 +149,7 @@
     dashboard = {
       enable = true;
       name = "Netdata";
-      description = "Metrics, logs & alerts";
+      description = "Metrics & alerts";
       group = "Monitoring";
       icon = "netdata.png";
     };
@@ -119,11 +159,13 @@
       port = PORTS.NETDATA;
 
       # LAN, and additionally behind a password. The remote_ip guard alone would
-      # be the only thing between the internet and an unauthenticated shell-
-      # adjacent view of this host -- the journal browser reads every unit's
-      # logs, and Netdata has no login to fall back on if that guard is ever
-      # loosened by mistake. Two independent controls, matching how the rest of
-      # this config treats loopback binds plus firewall rules.
+      # be the only thing between the internet and an unauthenticated view of
+      # this host's entire metric history, and there is no login underneath it
+      # to fall back on if that guard is ever loosened by mistake -- the agent
+      # has no local identity provider, so basic_auth here is not defence in
+      # depth, it is the only authentication in front of this dashboard. Two
+      # independent controls, matching how the rest of this config treats
+      # loopback binds plus firewall rules.
       #
       # `import` is a Caddyfile preprocessing directive and works inside a
       # route. The credentials live in an agenix file rather than inline because

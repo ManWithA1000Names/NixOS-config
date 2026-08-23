@@ -21,12 +21,12 @@ let
   # ports are absent from allowedTCPPorts, so a direct hit on e.g. :8096 is
   # dropped regardless of what happens here.
   #
-  # IP.o700 is present even in NONE. The blackbox prober resolves service names
-  # through dnsmasq, which answers with this host's LAN address, so its probes
-  # leave and re-enter via that address rather than 127.0.0.1. Omit it and
-  # probe_success goes to 0 for every internal service at once, firing
-  # ProbeFailed across the whole arr stack -- a monitoring break that presents
-  # as a service break. Allowing it widens nothing: that address is this host.
+  # IP.o700 is present even in NONE, so that anything on this host reaching an
+  # internal service by name still matches: dnsmasq answers with this host's
+  # LAN address, so such a request leaves and re-enters via that address rather
+  # than 127.0.0.1. Nothing currently depends on this -- the monitoring that
+  # did was removed -- but allowing it widens nothing, since that address is
+  # this host.
   #
   # IPv4-only for the LAN range, for the same reason IP.lan itself is: this
   # interface also carries globally routable IPv6, so an IPv6 form would match
@@ -151,11 +151,11 @@ in
 
       # On a WAN-exposed address, logging every refused connection would write
       # every unsolicited SYN from every background internet scanner into the
-      # journal -- which is now shipped to VictoriaLogs and counted against its
-      # 10 GiB cap. The information content is near zero (the packets were
-      # dropped) and the volume dominates every other log source combined.
-      # Attack visibility comes from fail2ban's counters, the Fail2banBanBurst
-      # alert, and Caddy's access logs instead.
+      # journal -- which is the log store itself, capped at 10G, and read by
+      # fail2ban, so crowding it out costs bans rather than just history. The
+      # information content is near zero (the packets were dropped) and the
+      # volume dominates every other log source combined. Attack visibility
+      # comes from fail2ban's counters and Caddy's access logs instead.
       logRefusedConnections = false;
 
       extraInputRules = ''
@@ -313,10 +313,11 @@ in
       #
       # Two exemptions remain. big-boss is the recovery path when the WAN side
       # is misconfigured, and banning it turns a typo into a trip with a
-      # keyboard. IP.o700 is this host: the blackbox prober's requests arrive
-      # from its own LAN address, so without it a service that answers 404 on /
-      # would have the host ban itself inside the hour -- which, with
-      # bantime-increment, escalates rather than self-corrects.
+      # keyboard. IP.o700 is this host, whose own requests to an internal
+      # service by name arrive from its own LAN address rather than loopback --
+      # so without it this host could ban itself, which under bantime-increment
+      # escalates rather than self-corrects. Nothing on the host currently
+      # generates such traffic in volume; the entry is cheap insurance.
       ignoreIP = [
         "127.0.0.0/8"
         "::1"
