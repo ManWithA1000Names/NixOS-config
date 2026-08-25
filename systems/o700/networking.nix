@@ -34,16 +34,14 @@ let
   # which answers A records only (local=/o700.net/ makes AAAA return NODATA),
   # so they arrive over IPv4 and match. A LAN device that bypasses dnsmasq --
   # a phone with its own DoH, say -- and connects over IPv6 is treated as WAN.
-  vhostSources = {
+  vhostSources = rec {
     NONE = [
       "127.0.0.1/32"
       "::1/128"
       "${IP.o700}/32"
     ];
-    LAN = [
-      "127.0.0.1/32"
-      "::1/128"
-      "${IP.o700}/32"
+    LAN = NONE ++ [
+      IP.big-boss
       IP.lan
     ];
     WAN = [ ];
@@ -70,8 +68,21 @@ let
   vhostConfig =
     proxy:
     let
+      headerLines =
+        lib.mapAttrsToList (k: v: "header_up ${k} ${v}") proxy.headers
+        ++ map (k: "header_up -${k}") proxy.removeHeaders;
+
       handler =
-        if proxy.config != "" then proxy.config else "reverse_proxy localhost:${toString proxy.port}";
+        if proxy.config != "" then
+          proxy.config
+        else if headerLines == [ ] then
+          "reverse_proxy localhost:${toString proxy.port}"
+        else
+          ''
+            reverse_proxy localhost:${toString proxy.port} {
+              ${lib.concatStringsSep "\n      " headerLines}
+            }
+          '';
 
       sources = vhostSources.${proxy.exposure};
 

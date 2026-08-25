@@ -265,13 +265,8 @@ in
         port = PORTS.QBITTORRENT;
         domain = "qbit-internal.${DOMAIN}";
         exposure = "NONE";
-        config = ''
-          reverse_proxy localhost:${toString PORTS.QBITTORRENT} {
-            header_up Host localhost:${toString PORTS.QBITTORRENT}
-            header_up -Origin
-            header_up -Referer
-          }
-        '';
+        headers = { Host = "localhost:${toString PORTS.QBITTORRENT}"; };
+        removeHeaders = [ "Origin" "Referer" ];
       };
     };
 

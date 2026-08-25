@@ -85,6 +85,18 @@
                     description = "Custom caddy configuration for the service.";
                   };
 
+                  headers = lib.mkOption {
+                    type = lib.types.attrsOf lib.types.str;
+                    default = { };
+                    description = "Request headers forwarded upstream (header_up Name Value).";
+                  };
+
+                  removeHeaders = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [ ];
+                    description = "Request headers stripped before reaching the upstream (header_up -Name).";
+                  };
+
                   # Deliberately has no default: a service that does not state
                   # its exposure would otherwise silently get the most
                   # restrictive hardening, look broken, and be "fixed" by
