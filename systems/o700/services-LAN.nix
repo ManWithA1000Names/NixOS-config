@@ -153,8 +153,7 @@
         "paperless-web"
       ];
 
-      # MIGRATION STEP 1 -- uncomment with services.paperless.database above.
-      # postgres = true;
+      postgres = true;
 
       dashboard = {
         enable = true;
@@ -173,8 +172,7 @@
 
     mealie = {
       critical = true;
-      # MIGRATION STEP 4 -- uncomment with services.mealie.database above.
-      # postgres = true;
+      postgres = true;
 
       dashboard = {
         enable = true;

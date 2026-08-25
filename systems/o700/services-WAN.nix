@@ -80,8 +80,7 @@
     gitea = {
       critical = true;
 
-      # MIGRATION STEP 3 -- uncomment with services.gitea.database above.
-      # postgres = true;
+      postgres = true;
 
       dashboard = {
         enable = true;
