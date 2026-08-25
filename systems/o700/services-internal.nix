@@ -1,4 +1,6 @@
 {
+  config,
+  lib,
   IP,
   PORTS,
   PATHS,
@@ -6,8 +8,55 @@
   MEDIA_GROUP,
   ...
 }:
+
+let
+  # Services whose state lives in the centralized postgres. Sorted so the
+  # generated SQL is stable across rebuilds.
+  postgresServices = lib.sort (a: b: a < b) (
+    builtins.attrNames (lib.filterAttrs (_: meta: meta.postgres) config.seta)
+  );
+in
 {
   services = {
+    # The centralized database. Every service that keeps relational state
+    # points here instead of maintaining its own sqlite file, so there is one
+    # thing to back up rather than one per service.
+    #
+    # Enabled unconditionally rather than derived from `any seta.postgres`:
+    # the server is infrastructure that has to exist *before* the first
+    # migration, not a consequence of one. It initialises PGDATA on the next
+    # rebuild and then sits idle until a service is pointed at it.
+    postgresql = {
+      enable = true;
+
+      # No `settings.port`, no `enableTCPIP`, and nothing added to
+      # allowedTCPPorts: the only path in is the unix socket under
+      # POSTGRESQL_DBHOST. Authentication is therefore `local all all peer` --
+      # the module's default pg_hba -- so the OS user *is* the credential and
+      # there is no password anywhere in this config to leak, rotate or put in
+      # agenix. The md5 lines in that same default cover only 127.0.0.1 and
+      # ::1, which nothing reaches.
+      #
+      # No `package` either. The default is keyed to system.stateVersion
+      # ("26.05" -> postgresql_17), so it stays on 17 across channel bumps.
+      # Pinning it by hand would only add a second place to forget. A major
+      # version move is a manual pg_upgrade either way.
+
+      # Databases and roles come from the seta manifest. Role name == database
+      # name == service name is what makes peer auth work, and ensureDBOwnership
+      # asserts the pairing.
+      #
+      # Duplicates against the upstream modules' own declarations (mealie,
+      # paperless, gitea and vaultwarden each push their own) are harmless:
+      # both generators are `SELECT 1 ... || CREATE`.
+      ensureDatabases = postgresServices;
+
+      ensureUsers = map (name: {
+        inherit name;
+        ensureDBOwnership = true;
+      }) postgresServices;
+    };
+
     # Bazarr (subtitle fetching for the Arr stack) is deliberately absent: it
     # was never used, and it is not free to leave running -- ~111 threads and
     # the memory that implies, held whether or not anything ever asks it for a
@@ -174,6 +223,15 @@
 
   seta = {
     prowlarr = {
+      # No requiresExSSD: prowlarr holds indexer definitions in its own state
+      # directory on the root disk and never touches the media tree.
+      #
+      # No postgres either, and the same goes for sonarr/radarr above. Servarr
+      # *can* do it -- the freeform `settings` becomes SONARR__POSTGRES__HOST
+      # env vars -- but each instance needs two databases (-main and -log) and
+      # there is no migration path: pointing one at postgres gives you an empty
+      # instance and you re-add every indexer, series and download-client by
+      # hand. Not worth it for state that is already disposable.
       proxy = {
         enable = true;
         port = PORTS.PROWLARR;
@@ -183,6 +241,8 @@
     };
 
     qbittorrent = {
+      requiresExSSD = true;
+
       proxy = {
         enable = true;
         port = PORTS.QBITTORRENT;
@@ -199,6 +259,8 @@
     };
 
     radarr = {
+      requiresExSSD = true;
+
       proxy = {
         enable = true;
         port = PORTS.RADARR;
@@ -208,6 +270,8 @@
     };
 
     sonarr = {
+      requiresExSSD = true;
+
       proxy = {
         enable = true;
         port = PORTS.SONARR;

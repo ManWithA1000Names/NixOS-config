@@ -121,23 +121,28 @@
     #
     # RequiresMountsFor pulls in the .mount unit and orders after it, so these
     # fail within the device timeout rather than hanging.
+    #
+    # The service half of this list is now derived from seta.<svc>.requiresExSSD
+    # rather than restated here, so adding a service to the media stack cannot
+    # leave it half-wired. infraRequiresExSSD is the escape hatch for units that
+    # have no seta entry at all -- seta is keyed by *service*, and this one is
+    # infrastructure.
     services =
-      lib.genAttrs
-        [
-          "jellyfin"
-          "sonarr"
-          "radarr"
-          "qbittorrent"
-          "backup-vaultwarden"
+      let
+        infraRequiresExSSD = [
           # There is exactly one export and it lives on the SSD. Refusing to start
           # beats exporting the empty mount-point: clients get a connection
           # refused immediately instead of mounting a plausible-looking empty tree.
           "nfs-server"
-        ]
-        (_: {
-          unitConfig.RequiresMountsFor = PATHS.EX-SSD;
-        });
+        ];
 
+        setaRequiresExSSD = lib.concatMap (meta: meta.units) (
+          builtins.filter (meta: meta.requiresExSSD) (builtins.attrValues config.seta)
+        );
+      in
+      lib.genAttrs (lib.unique (infraRequiresExSSD ++ setaRequiresExSSD)) (_: {
+        unitConfig.RequiresMountsFor = PATHS.EX-SSD;
+      });
   };
 
   nixpkgs = {

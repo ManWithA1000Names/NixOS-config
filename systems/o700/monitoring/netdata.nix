@@ -158,20 +158,6 @@
       enable = true;
       port = PORTS.NETDATA;
 
-      # LAN, and additionally behind a password. The remote_ip guard alone would
-      # be the only thing between the internet and an unauthenticated view of
-      # this host's entire metric history, and there is no login underneath it
-      # to fall back on if that guard is ever loosened by mistake -- the agent
-      # has no local identity provider, so basic_auth here is not defence in
-      # depth, it is the only authentication in front of this dashboard. Two
-      # independent controls, matching how the rest of this config treats
-      # loopback binds plus firewall rules.
-      #
-      # `import` is a Caddyfile preprocessing directive and works inside a
-      # route. The credentials live in an agenix file rather than inline because
-      # everything written here lands in the nix store, which is world-readable
-      # on this host.
-      #
       # The CSP is a backstop for the bundled dashboard's third-party calls.
       # Most of them -- Google Tag Manager, PostHog, Sentry -- are already dead
       # because the agent build hardcodes `tracking: false`, and the registry
@@ -181,12 +167,12 @@
       # connect-src and frame-src are constrained: script-src is left alone
       # because the dashboard's own bundle is what would break.
       config = ''
-        import ${config.age.secrets.netdata-basicauth.path}
         header Content-Security-Policy "connect-src 'self'; frame-src 'self'"
         reverse_proxy localhost:${toString PORTS.NETDATA}
       '';
 
-      exposure = "LAN";
+      domain = "netdata-internal.${DOMAIN}";
+      exposure = "NONE";
     };
   };
 }

@@ -76,7 +76,13 @@ let
   # This path is now load-bearing in a way it was not before. Netdata's health
   # engine covers thresholds -- disk, memory, pressure -- but it cannot report
   # its own death, and there is no longer a second alerting system to notice.
-  criticalUnits = [
+  #
+  # Split in two deliberately. seta is keyed by *service*, and most of what
+  # belongs here is infrastructure with no seta entry at all -- so seta could
+  # not replace this list, only extend it. Deriving the whole thing from seta
+  # would have silently dropped sshd, nftables and fail2ban from the alerting
+  # path, which is a failure that announces itself only by never arriving.
+  infraCriticalUnits = [
     "netdata"
     "caddy"
     "sshd"
@@ -88,16 +94,25 @@ let
     "nftables"
     "dnsmasq"
     "dnscrypt-proxy"
-    "vaultwarden"
-    "backup-vaultwarden"
-    "gitea"
     "nfs-server"
+    # Every service that has been migrated onto the centralized database now
+    # fails when this one does, so its death is worth its own message rather
+    # than being inferred from the pile of unrelated-looking failures that
+    # follow it.
+    "postgresql"
     # Not a service that can crash so much as one that reports by failing: the
     # audit exits non-zero when it finds something, so OnFailure here is the
     # delivery path for its findings, not just for its own breakage.
     "host-audit"
   ];
-  # TODO: Determine all ctritical units (add to seta?)
+
+  # vaultwarden, backup-vaultwarden and gitea reach this list via
+  # seta.<svc>.critical + seta.<svc>.units, so they are no longer named here.
+  setaCriticalUnits = lib.concatMap (meta: meta.units) (
+    builtins.filter (meta: meta.critical) (builtins.attrValues config.seta)
+  );
+
+  criticalUnits = lib.unique (infraCriticalUnits ++ setaCriticalUnits);
 in
 {
   systemd.services =

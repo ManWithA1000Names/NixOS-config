@@ -33,6 +33,9 @@ let
       DNSCRYPT = 5335;
       MDNS = 5353;
       RESOLVED = 5355;
+      # Postgres does not bind to this port as of yet.
+      # All connection with it is done through local sockets.
+      POSTGRESQL = 5432;
       SEERR = 5055;
       RADARR = 7878;
       DASHBOARD = 8000;

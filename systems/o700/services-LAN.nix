@@ -25,6 +25,28 @@
       enable = true;
       port = PORTS.PAPERLESS;
       domain = "${config.seta.paperless.proxy.domain}";
+
+      # MIGRATION STEP 1 -- uncomment together with seta.paperless.postgres.
+      #
+      # This one is first because it is the only service with a first-class,
+      # engine-agnostic migration: the exporter below writes a portable dump
+      # that `paperless-manage document_importer` reads back into whatever
+      # engine is configured. No pgloader, no schema guessing.
+      #
+      #   1. paperless.exporter.enable = true, rebuild, let it run once (or
+      #      `systemctl start paperless-exporter`).
+      #   2. Uncomment the two lines below and rebuild. createLocally sets
+      #      PAPERLESS_DBENGINE/DBHOST/DBNAME/DBUSER and adds the
+      #      postgresql.target ordering; the database itself already exists,
+      #      created by seta.
+      #   3. sudo -u paperless paperless-manage document_importer <exportdir>
+      #
+      # This is also the rehearsal for everything after it: it proves the
+      # socket, peer auth and unit ordering work before anything valuable
+      # depends on them.
+      #
+      # database.createLocally = true;
+      # exporter.enable = true;
     };
 
     mealie = {
@@ -37,6 +59,20 @@
       # produces relative-looking links that resolve against whatever host the
       # client happened to use.
       settings.BASE_URL = "https://${config.seta.mealie.proxy.domain}";
+
+      # MIGRATION STEP 4 -- uncomment together with seta.mealie.postgres.
+      #
+      # Sets DB_ENGINE=postgres and
+      # POSTGRES_URL_OVERRIDE=postgresql://mealie:@/mealie?host=/run/postgresql
+      # -- note the empty password, which is peer auth over the socket, and
+      # note the absent port, which is why POSTGRESQL must stay 5432.
+      #
+      # No official migrator. Stock pkgs.pgloader should serve: mealie is
+      # SQLAlchemy and its identifiers are lowercase, so it does not hit the
+      # quoting bug that affects seerr. Rehearse against a *copy* of
+      # /var/lib/mealie/mealie.db first.
+      #
+      # database.createLocally = true;
     };
 
     seerr = {
@@ -99,6 +135,9 @@
 
   seta = {
     jellyfin = {
+      critical = true;
+      requiresExSSD = true;
+
       dashboard = {
         enable = true;
         name = "Jellyfin";
@@ -115,6 +154,9 @@
     };
 
     kavita = {
+      critical = true;
+      requiresExSSD = true;
+
       dashboard = {
         enable = true;
         name = "Kavita";
@@ -131,6 +173,24 @@
     };
 
     paperless = {
+      critical = true;
+
+      # Paperless has no unit called "paperless" -- the module ships
+      # paperless-scheduler, paperless-task-queue, paperless-consumer and
+      # paperless-web. The `units` default of [ name ] would therefore name a
+      # unit that does not exist, which fails the same silent way the nftables
+      # note in monitoring/notify.nix describes: systemd synthesises an empty
+      # unit and every flag hung off it quietly does nothing.
+      units = [
+        "paperless-scheduler"
+        "paperless-task-queue"
+        "paperless-consumer"
+        "paperless-web"
+      ];
+
+      # MIGRATION STEP 1 -- uncomment with services.paperless.database above.
+      # postgres = true;
+
       dashboard = {
         enable = true;
         name = "Paperless";
@@ -147,6 +207,10 @@
     };
 
     mealie = {
+      critical = true;
+      # MIGRATION STEP 4 -- uncomment with services.mealie.database above.
+      # postgres = true;
+
       dashboard = {
         enable = true;
         name = "Mealie";
@@ -163,6 +227,8 @@
     };
 
     seerr = {
+      critical = true;
+
       dashboard = {
         enable = true;
         name = "Seerr";
@@ -179,11 +245,11 @@
     };
 
     homepage-dashboard = {
+      critical = true;
+
       proxy = {
         enable = true;
         port = PORTS.DASHBOARD;
-        # The apex, not a subdomain: this is the entry point that links to
-        # everything else.
         domain = DOMAIN;
         exposure = "LAN";
       };
