@@ -57,8 +57,8 @@ in
       # asserts the pairing.
       #
       # Duplicates against the upstream modules' own declarations (mealie,
-      # paperless, gitea and vaultwarden each push their own) are harmless:
-      # both generators are `SELECT 1 ... || CREATE`.
+      # paperless and gitea each push their own) are harmless: both generators
+      # are `SELECT 1 ... || CREATE`.
       ensureDatabases = postgresServices;
 
       # netdata is the one role with no database of its own: it reads the

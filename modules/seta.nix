@@ -144,9 +144,9 @@
                 here, including the DynamicUser ones.
 
                 Safe to set even when the service's own nixpkgs module already
-                declares the same database (mealie, paperless, gitea and
-                vaultwarden all do): ensureDatabases/ensureUsers are generated
-                as `SELECT 1 ... || CREATE`, so a duplicate entry is a no-op.
+                declares the same database (mealie, paperless and gitea all
+                do): ensureDatabases/ensureUsers are generated as
+                `SELECT 1 ... || CREATE`, so a duplicate entry is a no-op.
 
                 Doubles as the manifest for the backup job -- the point of
                 centralizing was to have one thing to dump.
