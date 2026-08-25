@@ -50,7 +50,7 @@
       # but rehearse against a *copy* of /var/lib/gitea/data/gitea.db and
       # compare row counts before pointing the live instance at the result.
       #
-      # database.type = "postgres";
+      database.type = "postgres";
     };
   };
 
