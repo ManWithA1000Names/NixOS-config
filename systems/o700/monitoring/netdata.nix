@@ -146,14 +146,6 @@
   # +-----------------------------------------------------------------+
 
   seta.netdata = {
-    dashboard = {
-      enable = true;
-      name = "Netdata";
-      description = "Metrics & alerts";
-      group = "Monitoring";
-      icon = "netdata.png";
-    };
-
     proxy = {
       enable = true;
       port = PORTS.NETDATA;
