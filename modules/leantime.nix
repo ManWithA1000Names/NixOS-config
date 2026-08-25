@@ -107,7 +107,12 @@ let
   toEnvValue =
     v:
     if builtins.isBool v then
-      (if v then "true" else "false")
+      # PHP-FPM's config parser treats the bare words `true`/`false` as
+      # booleans, and a boolean false is "empty" -- which makes FPM reject
+      # the pool config entirely. Use 1/0 instead: FPM accepts them as
+      # non-empty strings, and PHP's (bool)"0" evaluates to false, which is
+      # the semantically correct result for Leantime's env-var checks.
+      (if v then "1" else "0")
     else if builtins.isInt v then
       toString v
     else
