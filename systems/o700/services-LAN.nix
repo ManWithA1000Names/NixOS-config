@@ -27,7 +27,6 @@
       domain = "${config.seta.paperless.proxy.domain}";
 
       database.createLocally = true;
-      exporter.enable = true;
     };
 
     mealie = {

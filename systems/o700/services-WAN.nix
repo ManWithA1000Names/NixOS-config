@@ -36,20 +36,6 @@
         service.DISABLE_REGISTRATION = true;
       };
 
-      # MIGRATION STEP 3 -- uncomment together with seta.gitea.postgres.
-      #
-      # The biggest single payoff here: gitea's sqlite file is the largest and
-      # busiest state on this host. `createDatabase` already defaults true and
-      # `socket` then defaults to /run/postgresql, so type alone is enough --
-      # and unlike mealie, gitea reads the configured port back
-      # (database.port defaults to pg.settings.port), so it is the one service
-      # that would survive POSTGRESQL moving off 5432.
-      #
-      # No built-in converter. Stock pkgs.pgloader should serve -- gitea's xorm
-      # identifiers are lowercase snake_case, so it avoids the quoting bug --
-      # but rehearse against a *copy* of /var/lib/gitea/data/gitea.db and
-      # compare row counts before pointing the live instance at the result.
-      #
       database.type = "postgres";
     };
   };
