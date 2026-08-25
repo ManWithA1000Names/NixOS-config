@@ -144,10 +144,18 @@
       # reads, and the right interval for them is a different question from
       # the one answered in the db block -- one to settle by measuring, if the
       # collector ever shows up as a cost.
+      #
+      # autodetection_retry because nothing orders this after postgres: a job
+      # that fails to connect at startup is dropped for good, so without it a
+      # boot where netdata wins the race against postgresql-setup leaves the
+      # collector silently absent until netdata is next restarted. Retrying is
+      # the collector-native fix; a systemd ordering edge would only cover the
+      # boot case and not, say, a postgres restart.
       "go.d/postgres.conf" = pkgs.writeText "postgres.conf" ''
         jobs:
           - name: local
             dsn: 'host=/run/postgresql dbname=postgres user=netdata'
+            autodetection_retry: 60
       '';
 
       # alarm-notify.sh sources the stock health_alarm_notify.conf first and

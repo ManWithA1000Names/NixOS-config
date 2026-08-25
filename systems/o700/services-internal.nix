@@ -323,11 +323,21 @@ in
     services = {
       # pg_monitor is a read-only monitoring role -- the stat views and the
       # server settings, no table data -- and it is what netdata's collector
-      # needs to see past its own session. mkAfter appends to the module's own
-      # postStart, so this runs after ensureUsers has created the role, as the
-      # postgres user, with psql already on PATH. Re-granting an existing role
-      # membership is a no-op, so it is safe on every restart.
-      postgresql.postStart = lib.mkAfter ''
+      # needs to see past its own session. It has to be granted by hand because
+      # ensureUsers can only set the CREATE ROLE flags, not role membership.
+      #
+      # postgresql-setup is the unit that owns ensureDatabases/ensureUsers, and
+      # appending here is what puts the grant *after* the role exists. The
+      # obvious-looking spot -- postgresql.service's postStart -- is wrong and
+      # fails loudly: postgresql-setup is ordered after postgresql.service, so
+      # a grant there runs before the role is created, and because it lands as
+      # an ExecStartPost on the server itself a non-zero exit fails the unit
+      # and Restart=always turns it into a boot loop until the start limit
+      # catches it. Here the worst case is a failed oneshot.
+      #
+      # Re-granting an existing membership is a no-op, so this is safe on every
+      # start.
+      postgresql-setup.script = lib.mkAfter ''
         psql -tAc 'GRANT pg_monitor TO "netdata"'
       '';
 
