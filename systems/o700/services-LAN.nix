@@ -212,7 +212,7 @@
       proxy = {
         enable = true;
         port = PORTS.DASHBOARD;
-        domain = DOMAIN;
+        domain = "home.${DOMAIN}";
         exposure = "LAN";
       };
     };
