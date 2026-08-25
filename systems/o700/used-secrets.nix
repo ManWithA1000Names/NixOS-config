@@ -21,15 +21,5 @@ _: {
       owner = "netdata";
       group = "netdata";
     };
-
-    # A Caddyfile fragment, not a bare credential: it holds the entire
-    # `basic_auth { }` block, because Caddy has no directive that reads a
-    # password from a separate file. Imported by seta.netdata.proxy.config.
-    # Owned by caddy, which reads it when it loads its config.
-    netdata-basicauth = {
-      file = ../../secrets/netdata-basicauth.age;
-      owner = "caddy";
-      group = "caddy";
-    };
   };
 }
