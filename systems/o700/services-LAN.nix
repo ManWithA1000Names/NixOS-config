@@ -26,8 +26,6 @@
       port = PORTS.PAPERLESS;
       domain = "${config.seta.paperless.proxy.domain}";
 
-      exporter.enable = true;
-
       # MIGRATION STEP 1 -- uncomment together with seta.paperless.postgres.
       #
       # This one is first because it is the only service with a first-class,
@@ -47,8 +45,8 @@
       # socket, peer auth and unit ordering work before anything valuable
       # depends on them.
       #
-      # database.createLocally = true;
-      # exporter.enable = true;
+      database.createLocally = true;
+      exporter.enable = true;
     };
 
     mealie = {
