@@ -475,10 +475,17 @@ in
           # Exists purely so caddy manages a wildcard cert. Caddy skips
           # per-name certs for any subject a managed wildcard covers, so every
           # single-label service host above shares this one cert -- which is
-          # why seta.<svc>.proxy.domain must stay single-label. The apex is
-          # not covered (a wildcard matches exactly one label) and gets its
-          # own cert; so would any deeper name. Exact hosts still win at
-          # routing time, so this only catches subdomains with no service.
+          # why seta.<svc>.proxy.domain must stay single-label. The
+          # Cloudflare DNS-01 provider issues the cert with both `*.${DOMAIN}`
+          # and `${DOMAIN}` as SANs, so the apex vhost above also reuses it.
+          # Exact hosts still win at routing time, so this only catches
+          # subdomains with no service.
+          "${DOMAIN}" = {
+            extraConfig = ''
+              redir https://home.${DOMAIN}{uri} permanent
+            '';
+          };
+
           "*.${DOMAIN}" = {
             extraConfig = ''
               ${securityHeaders}
