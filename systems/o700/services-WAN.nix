@@ -23,6 +23,7 @@
       environmentFile = config.age.secrets.leantime-session.path;
       settings = {
         LEAN_ALLOW_TELEMETRY = false;
+        LEAN_NEWS_ENABLED = false;
         LEAN_DEFAULT_TIMEZONE = "Europe/Athens";
       };
     };
