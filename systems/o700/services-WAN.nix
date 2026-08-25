@@ -17,6 +17,16 @@
       };
     };
 
+    leantime = {
+      enable = true;
+      appUrl = "https://${config.seta.leantime.proxy.domain}";
+      environmentFile = config.age.secrets.leantime-session.path;
+      settings = {
+        LEAN_ALLOW_TELEMETRY = false;
+        LEAN_DEFAULT_TIMEZONE = "Europe/Athens";
+      };
+    };
+
     gitea = {
       enable = true;
       lfs.enable = true;
@@ -60,6 +70,39 @@
         port = PORTS.VAULTWARDEN;
         domain = "vault.${DOMAIN}";
         exposure = "WAN";
+      };
+    };
+
+    leantime = {
+      critical = true;
+      postgres = true;
+
+      # phpfpm-leantime is the actual unit; "leantime" does not exist as a
+      # systemd unit, so the default units = [ name ] would silently wire
+      # OnFailure to a ghost unit.
+      units = [ "phpfpm-leantime" ];
+
+      dashboard = {
+        enable = true;
+        name = "Leantime";
+        description = "Project management";
+        group = "Apps";
+        icon = "leantime.png";
+      };
+
+      proxy = {
+        enable = true;
+        domain = "leantime.${DOMAIN}";
+        # Placeholder: leantime speaks FastCGI over a unix socket, not HTTP.
+        # This value satisfies the required seta.proxy.port type but is never
+        # bound to. The actual handler is in proxy.config below.
+        port = PORTS.LEANTIME;
+        exposure = "WAN";
+        config = ''
+          root * ${config.services.leantime.package}/share/leantime/public
+          php_fastcgi unix//run/phpfpm/leantime.sock
+          file_server
+        '';
       };
     };
 

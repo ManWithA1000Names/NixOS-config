@@ -41,6 +41,9 @@ let
       DASHBOARD = 8000;
       GITEA = 8001;
       MEALIE = 8002;
+      # Leantime uses a php-fpm unix socket, not HTTP. This port is a
+      # placeholder required by seta.proxy.port but never bound to.
+      LEANTIME = 8003;
       QBITTORRENT = 8080;
       JELLYFIN = 8096;
       SONARR = 8989;
