@@ -46,10 +46,12 @@
     # The two things this host actually needs -- PSI and cgroup metrics, and
     # per-app resource usage -- are both C plugins. python.d is a separate
     # interpreter running a scheduler for collectors this host has nothing for
-    # (postgres, nvidia-smi, ceph...). Apart from systemd-journal below, every
-    # other plugin is left at its default: the point of this rewrite was to stop
-    # guessing at what is heavy, so anything else gets disabled only after it is
-    # measured doing damage.
+    # (nvidia-smi, ceph...). Note that this does not disable the postgres
+    # collector configured below: that one was ported to Go years ago and lives
+    # in go.d, which is a different plugin. Apart from systemd-journal below,
+    # every other plugin is left at its default: the point of this rewrite was
+    # to stop guessing at what is heavy, so anything else gets disabled only
+    # after it is measured doing damage.
     python.enable = false;
 
     config = {
@@ -100,10 +102,14 @@
         # cardinality explosion costs retention rather than growing unbounded
         # and taking the root filesystem with it. Being a *byte* budget, it
         # interacts with the rate above -- a fifth as many points per metric
-        # stretches the same 512MiB about five times further, so at 5s this is
-        # on the order of a month for this host's chart count rather than the
-        # week it held at 1s.
-        "dbengine tier 0 retention size" = "512MiB";
+        # stretches the same budget about five times further.
+        #
+        # Raised from 512MiB when the postgres collector was added: that one
+        # charts per-database, so the chart count now grows with every service
+        # migrated onto the centralized instance, and at a fixed budget each
+        # migration would have silently shortened the retention window for
+        # everything else.
+        "dbengine tier 0 retention size" = "2GiB";
       };
 
       registry = {
@@ -122,6 +128,28 @@
     };
 
     configDir = {
+      # The centralized postgres, declared rather than discovered. go.d's
+      # net_listeners service discovery already finds anything on 5432 and
+      # tries three template DSNs against it; naming the job here means the
+      # connection details are in this config instead of in netdata's shipped
+      # discovery rules, which are free to change under us on any bump.
+      #
+      # Socket, not TCP: postgres no longer opens a port at all (see
+      # listen_addresses in services-internal.nix), and peer auth over the
+      # socket means the OS user netdata runs as is the whole credential --
+      # there is no password here to keep out of the store.
+      #
+      # Left at the collector's default update rate rather than the 5s used
+      # for /proc above. These are SQL queries against pg_stat_*, not file
+      # reads, and the right interval for them is a different question from
+      # the one answered in the db block -- one to settle by measuring, if the
+      # collector ever shows up as a cost.
+      "go.d/postgres.conf" = pkgs.writeText "postgres.conf" ''
+        jobs:
+          - name: local
+            dsn: 'host=/run/postgresql dbname=postgres user=netdata'
+      '';
+
       # alarm-notify.sh sources the stock health_alarm_notify.conf first and
       # this one second, so only the overridden keys need to appear here; every
       # other notification method keeps its stock (disabled) default.

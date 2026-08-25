@@ -34,9 +34,19 @@ in
       # POSTGRESQL_DBHOST. Authentication is therefore `local all all peer` --
       # the module's default pg_hba -- so the OS user *is* the credential and
       # there is no password anywhere in this config to leak, rotate or put in
-      # agenix. The md5 lines in that same default cover only 127.0.0.1 and
-      # ::1, which nothing reaches.
+      # agenix.
       #
+      # `enableTCPIP = false` is not the same as not listening, which is why
+      # the line below exists. The module reads that option as
+      # `listen_addresses = "localhost"`, so the port still opened on 127.0.0.1
+      # and ::1; netdata's service discovery found it there and tried three
+      # logins against it before this was set. Empty is the value that means no
+      # TCP socket at all, and it needs mkForce because the module defines
+      # listen_addresses with a bare assignment rather than mkDefault -- a
+      # plain definition here is a conflict, not an override. The md5 lines in
+      # the default pg_hba are dead weight once this is set.
+      settings.listen_addresses = lib.mkForce "";
+
       # No `package` either. The default is keyed to system.stateVersion
       # ("26.05" -> postgresql_17), so it stays on 17 across channel bumps.
       # Pinning it by hand would only add a second place to forget. A major
@@ -51,10 +61,17 @@ in
       # both generators are `SELECT 1 ... || CREATE`.
       ensureDatabases = postgresServices;
 
+      # netdata is the one role with no database of its own: it reads the
+      # pg_stat_* views over the socket as its own OS user and owns nothing.
+      # It cannot come from the map above, which sets ensureDBOwnership -- the
+      # module asserts that every such role has a database of the same name.
+      # The pg_monitor grant lives in postStart because ensureClauses covers
+      # only the CREATE ROLE flags, not role membership.
       ensureUsers = map (name: {
         inherit name;
         ensureDBOwnership = true;
-      }) postgresServices;
+      }) postgresServices
+      ++ [ { name = "netdata"; } ];
     };
 
     # Bazarr (subtitle fetching for the Arr stack) is deliberately absent: it
@@ -304,6 +321,16 @@ in
     ];
 
     services = {
+      # pg_monitor is a read-only monitoring role -- the stat views and the
+      # server settings, no table data -- and it is what netdata's collector
+      # needs to see past its own session. mkAfter appends to the module's own
+      # postStart, so this runs after ensureUsers has created the role, as the
+      # postgres user, with psql already on PATH. Re-granting an existing role
+      # membership is a no-op, so it is safe on every restart.
+      postgresql.postStart = lib.mkAfter ''
+        psql -tAc 'GRANT pg_monitor TO "netdata"'
+      '';
+
       # Ordering only, and best-effort at that: dnscrypt-proxy is Type=simple, so
       # "started" means the process exists, not that it is answering yet.
       # Deliberately not a Requires -- if the proxy is dead, dnsmasq must still
