@@ -7,12 +7,12 @@ switch SYSTEM="host":
         exit
     fi
     if [ "{{ SYSTEM }}" = "host" ]; then
-        $SYSTEM="$(hostname)"
+        SYSTEM="$(hostname)"
     else
         if [ "{{ SYSTEM }}" != "$(hostname)" ]; then
             echo -e "\033[31mThis machine is '$(hostname)', not '{{ SYSTEM }}'.\033[0m"
         fi
-        $SYSTEM="{{ SYSTEM }}"
+        SYSTEM="{{ SYSTEM }}"
     fi
     if ! rg "nixosConfigurations.${SYSTEM}\s*=" > /dev/null; then
         echo -e "\033[31m'${SYSTEM}' is not a recognized system.\033[0m";
@@ -33,12 +33,12 @@ boot SYSTEM="host":
         exit
     fi
     if [ "{{ SYSTEM }}" = "host" ]; then
-        $SYSTEM="$(hostname)"
+        SYSTEM="$(hostname)"
     else
         if [ "{{ SYSTEM }}" != "$(hostname)" ]; then
             echo -e "\033[31mThis machine is '$(hostname)', not '{{ SYSTEM }}'.\033[0m"
         fi
-        $SYSTEM="{{ SYSTEM }}"
+        SYSTEM="{{ SYSTEM }}"
     fi
     if ! rg "nixosConfigurations.${SYSTEM}\s*=" > /dev/null; then
         echo -e "\033[31m'${SYSTEM}' is not a recognized system.\033[0m";
@@ -48,7 +48,7 @@ boot SYSTEM="host":
         exit
     fi
     git pull
-    sudo nixos-rebuild --flake {{ ".#" + SYSTEM }} boot
+    sudo nixos-rebuild --flake ".#$SYSTEM" boot
 
 # Build the next 'o700' generation here on 'big-boss' and switch to it there.
 switch-o700: (_deploy-o700 "switch")
