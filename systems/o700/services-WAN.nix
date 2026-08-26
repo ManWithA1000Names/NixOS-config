@@ -129,7 +129,7 @@
         enable = true;
         name = "Vaultwarden";
         description = "Password & Secrets manager";
-        group = "Apps";
+        group = "Files & Sharing";
         icon = "vaultwarden.png";
       };
 
