@@ -8,4 +8,5 @@ in
 {
   "cloudflare-dns-api.age".publicKeys = systems ++ users;
   "alerting.age".publicKeys = systems ++ users;
+  "opencloud-env.age".publicKeys = systems ++ users;
 }

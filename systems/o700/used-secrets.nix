@@ -21,5 +21,11 @@ _: {
       owner = "netdata";
       group = "netdata";
     };
+
+    # No owner, same reason as `alerting`: both opencloud units take this as a
+    # systemd EnvironmentFile, which PID 1 reads before dropping to the
+    # opencloud user. Contents are `KEY=value` lines, at minimum
+    # IDM_ADMIN_PASSWORD -- see services-WAN.nix for why that one matters.
+    opencloud-env.file = ../../secrets/opencloud-env.age;
   };
 }

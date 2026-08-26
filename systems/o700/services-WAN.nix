@@ -58,6 +58,39 @@
 
       database.type = "postgres";
     };
+
+    opencloud = {
+      enable = true;
+
+      port = PORTS.OPENCLOUD;
+      url = "https://${config.seta.opencloud.proxy.domain}";
+
+      # Without this, the init oneshot below invents an admin password on first
+      # boot and writes it into /etc/opencloud/opencloud.yaml, where reading it
+      # off the host is the only way to learn it. An env var beats the yaml, so
+      # supplying IDM_ADMIN_PASSWORD here keeps the credential in agenix and
+      # makes the first login reproducible rather than archaeological.
+      environmentFile = config.age.secrets.opencloud-env.path;
+
+      environment = {
+        # The module's default for this whole attrset is
+        # `{ OC_INSECURE = "true"; }`. Assigning replaces that default rather
+        # than merging into it, so dropping this line switches TLS verification
+        # back on for the internal service-to-service and NATS calls -- which
+        # have no certificates to satisfy it, because nothing issued any.
+        OC_INSECURE = "true";
+
+        # The proxy service defaults to serving *HTTPS* on its bind address,
+        # with a self-signed certificate it generates under the state
+        # directory. `opencloud init --insecure true` does not turn that off:
+        # it only relaxes backend and OIDC verification (see CreateConfig in
+        # opencloud/pkg/init/init.go), leaving PROXY_TLS at its default of
+        # true. Caddy's generated `reverse_proxy localhost:9200` speaks plain
+        # HTTP, so at the default this is a 502 on every single request.
+        # Terminating TLS once, at Caddy, is the intent anyway.
+        PROXY_TLS = "false";
+      };
+    };
   };
 
   systemd.services.vikunja = {
@@ -104,6 +137,39 @@
         enable = true;
         port = PORTS.VIKUNJA;
         domain = "vikunja.${DOMAIN}";
+        exposure = "WAN";
+      };
+    };
+
+    opencloud = {
+      critical = true;
+
+      # The module ships a second unit. opencloud-init-config is a oneshot,
+      # ordered before opencloud.service, that runs `opencloud init` to
+      # generate /etc/opencloud/opencloud.yaml when it is absent -- that file
+      # holds every inter-service credential, so if it fails the main unit
+      # crash-loops against a config that was never written. The `units`
+      # default of [ name ] would leave it unwatched.
+      units = [
+        "opencloud"
+        "opencloud-init-config"
+      ];
+
+      dashboard = {
+        enable = true;
+        name = "OpenCloud";
+        description = "File sync & sharing";
+        group = "Apps";
+        # selfh.st icon set (the `sh-` prefix). The dashboard-icons set that
+        # every other entry here draws from has no opencloud icon, only an
+        # owncloud one, and this is not that.
+        icon = "sh-opencloud.png";
+      };
+
+      proxy = {
+        enable = true;
+        port = PORTS.OPENCLOUD;
+        domain = "cloud.${DOMAIN}";
         exposure = "WAN";
       };
     };

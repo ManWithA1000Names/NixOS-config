@@ -45,6 +45,10 @@ let
       QBITTORRENT = 8080;
       JELLYFIN = 8096;
       SONARR = 8989;
+      # Only the proxy front door. Fullstack mode starts ~34 more listeners
+      # (9100-9290 plus a few high ones, and NATS on 9233); they are internal,
+      # bind loopback themselves, and nothing here refers to them by number.
+      OPENCLOUD = 9200;
       PROWLARR = 9696;
       VAULTWARDEN = 9999;
       NETDATA = 19999;
