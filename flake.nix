@@ -26,6 +26,7 @@
           ./systems/common/localization.nix
 
           ./systems/big-boss/user.nix
+          ./systems/big-boss/deploy.nix
           ./systems/big-boss/desktop.nix
           ./systems/big-boss/programs.nix
           ./systems/big-boss/services.nix
@@ -50,6 +51,7 @@
           ./systems/common/localization.nix
 
           ./systems/o700/user.nix
+          ./systems/o700/deploy.nix
           ./systems/o700/networking.nix
           ./systems/o700/monitoring.nix
           ./systems/o700/used-secrets.nix
