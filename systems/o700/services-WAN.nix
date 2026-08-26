@@ -7,6 +7,26 @@
   ...
 }:
 {
+  # Pulled in by `pkgs.opencloud.idp-web`, the login-page assets for the built-in
+  # OIDC provider, which still builds with pnpm_9 (pkgs.opencloud.web moved to
+  # pnpm_10 and is clean). Eval reaches it through IDP_ASSET_PATH in
+  # opencloud-init-config's environment, so it fails before anything is built.
+  #
+  # The seven CVEs are all attacks by untrusted *input* to pnpm: a lockfile that
+  # smuggles `--upload-pack=<cmd>` into git fetch (CVE-2026-50014), a patch file
+  # with `../` in its paths (CVE-2026-50015), a codeload.github.com that serves a
+  # tarball not matching the lockfile hash (CVE-2026-48995). None of those inputs
+  # are attacker-reachable here: the lockfile and patches come from the pinned
+  # opencloud source, the dependency fetch is a fixed-output derivation Nix
+  # hash-checks itself, and the build phase has no network at all. pnpm is also
+  # build-time only -- it is never in o700's runtime closure.
+  #
+  # This uses the old `permittedInsecurePackages` gate rather than the
+  # `nixpkgs.config.problems.handlers.*` style used in hardware-configuration.nix,
+  # because problems.nix defines only the maintainerless/broken/removal/deprecated
+  # kinds. Insecurity is still handled by check-meta.nix on the older path.
+  nixpkgs.config.permittedInsecurePackages = [ "pnpm-9.15.9" ];
+
   services = {
     vaultwarden = {
       enable = true;
