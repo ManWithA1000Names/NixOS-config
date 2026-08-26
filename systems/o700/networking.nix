@@ -146,6 +146,8 @@ in
         # it is listed here rather than via services.qbittorrent.openFirewall --
         # that option would open the WebUI port too.
         PORTS.QBITTORRENT_TORRENT
+
+        PORTS.JELLYFIN
       ];
 
       # Caddy enables HTTP/3 by default and advertises it via Alt-Svc. Without
