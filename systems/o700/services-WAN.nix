@@ -179,7 +179,7 @@
         enable = true;
         name = "OpenCloud";
         description = "File sync & sharing";
-        group = "Apps";
+        group = "Files & Sharing";
         # selfh.st icon set (the `sh-` prefix). The dashboard-icons set that
         # every other entry here draws from has no opencloud icon, only an
         # owncloud one, and this is not that.

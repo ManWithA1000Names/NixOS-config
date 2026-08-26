@@ -158,7 +158,7 @@
         enable = true;
         name = "Paperless";
         description = "Document manager";
-        group = "Apps";
+        group = "Files & Sharing";
         icon = "paperless-ngx.png";
       };
 
