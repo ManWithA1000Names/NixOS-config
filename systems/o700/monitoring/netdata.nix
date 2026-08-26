@@ -41,14 +41,32 @@
     # difference is that the bundle is vendored instead of downloaded at build
     # time. It is unfree (NCUL1) on top of GPL3, covered by the global
     # allowUnfree in systems/common/nix.nix.
-    package = pkgs.netdataCloud;
+    #
+    # withNdsudo defaults to false in nixpkgs, and while it is off the module
+    # never creates the security.wrappers entry for ndsudo -- the shipped binary
+    # stays non-setuid, so any collector that needs privileges fails quietly
+    # rather than loudly. It is what makes the fail2ban collector below work at
+    # all: /run/fail2ban is 0750 root-owned, so the netdata user cannot even
+    # reach the socket to be refused by it. The cost is a from-source build --
+    # no upstream binary is built with this flag, so nothing in cache.nixos.org
+    # matches and big-boss compiles the daemon and the go.d plugin itself.
+    package = pkgs.netdataCloud.override { withNdsudo = true; };
+
+    # This list is the entire root-capable surface, because ndsudo execs as
+    # root. nixpkgs patches it to *replace* PATH with this directory instead of
+    # searching /bin:/sbin:/usr/bin (upstream advisory GHSA-pmhq-4cxq-wj93), so
+    # a command in ndsudo's hardcoded allowlist is only reachable if its binary
+    # was put here deliberately. With fail2ban alone, everything ndsudo can do
+    # on this host is `fail2ban-client status [jail]`. The wrapper itself is
+    # root:netdata with o-rwx, so nothing outside that group can invoke it.
+    extraNdsudoPackages = [ pkgs.fail2ban ];
 
     # The two things this host actually needs -- PSI and cgroup metrics, and
     # per-app resource usage -- are both C plugins. python.d is a separate
     # interpreter running a scheduler for collectors this host has nothing for
-    # (nvidia-smi, ceph...). Note that this does not disable the postgres
-    # collector configured below: that one was ported to Go years ago and lives
-    # in go.d, which is a different plugin. Apart from systemd-journal below,
+    # (nvidia-smi, ceph...). Note that this does not disable the postgres or
+    # fail2ban collectors configured below: both were ported to Go years ago and
+    # live in go.d, which is a different plugin. Apart from systemd-journal below,
     # every other plugin is left at its default: the point of this rewrite was
     # to stop guessing at what is heavy, so anything else gets disabled only
     # after it is measured doing damage.
@@ -156,6 +174,42 @@
           - name: local
             dsn: 'host=/run/postgresql dbname=postgres user=netdata'
             autodetection_retry: 60
+      '';
+
+      # Per-jail ban counts for fail2ban (see networking.nix). Charts only:
+      # fail2ban.jail_banned_ips and fail2ban.jail_active_failures, labelled by
+      # jail. These are ordinary ANONYMOUS_DATA metrics, not a Function, so
+      # unlike the journal browser named in the header they are readable
+      # anonymously and none of the 412 gating applies.
+      #
+      # Declared rather than left to discovery for the same reason as postgres
+      # above -- go.d.conf enables this collector by default and conf.d ships a
+      # bare `- name: fail2ban` job -- except that here the point is to pin the
+      # interval rather than the connection details.
+      #
+      # 60s, not the 5s used for /proc: the collector shells out to
+      # fail2ban-client once to enumerate jails and once more per jail, and
+      # fail2ban-client is Python, so the global rate would mean roughly 48
+      # interpreter startups a minute on the spindle. The rate is set against
+      # what the data does rather than what the collector defaults to -- these
+      # are cumulative ban counters and every jail here has findtime of 5-10
+      # minutes, so nothing can move meaningfully inside one minute.
+      #
+      # No socket_path is given. The collector's default is
+      # /var/run/fail2ban/fail2ban.sock and the NixOS module puts the socket at
+      # /run/fail2ban/fail2ban.sock, which is the same file reached through the
+      # /var/run compatibility symlink.
+      #
+      # Nothing here alerts -- netdata ships no stock health template for this
+      # collector. The value is answering a question the counters in nftables
+      # cannot: whether caddy-badauth is banning a scanner or banning us. Under
+      # the bantime-increment in networking.nix that distinction is the
+      # difference between the jail working as designed and a LAN device outside
+      # ignoreIP being locked out for a week over a mistyped password.
+      "go.d/fail2ban.conf" = pkgs.writeText "fail2ban.conf" ''
+        jobs:
+          - name: fail2ban
+            update_every: 60
       '';
 
       # alarm-notify.sh sources the stock health_alarm_notify.conf first and
