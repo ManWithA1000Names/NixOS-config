@@ -43,7 +43,6 @@
         modules = [
           agenix.nixosModules.default
           ./modules/seta.nix
-          ./modules/leantime.nix
 
           ./systems/common/nix.nix
           ./systems/common/user.nix

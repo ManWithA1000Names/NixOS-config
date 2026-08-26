@@ -1,5 +1,6 @@
 {
   config,
+  lib,
   PORTS,
   DOMAIN,
   PATHS,
@@ -17,15 +18,23 @@
       };
     };
 
-    leantime = {
+    vikunja = {
       enable = true;
-      appUrl = "https://${config.seta.leantime.proxy.domain}";
-      environmentFile = config.age.secrets.leantime-session.path;
-      settings = {
-        LEAN_ALLOW_TELEMETRY = false;
-        LEAN_NEWS_ENABLED = false;
-        LEAN_DEFAULT_TIMEZONE = "Europe/Athens";
+      frontendScheme = "https";
+      frontendHostname = config.seta.vikunja.proxy.domain;
+      port = PORTS.VIKUNJA;
+      database = {
+        type = "postgres";
+        # Leading slash → libpq treats this as a unix socket directory, which
+        # selects peer authentication: the OS user "vikunja" (from DynamicUser)
+        # is the credential, so no password is needed or stored anywhere.
+        host = "/run/postgresql";
+        user = "vikunja";
+        database = "vikunja";
       };
+      # The module defaults to ":port" (all interfaces). Loopback so caddy is
+      # the only path in; the firewall not listing this port is the second layer.
+      settings.service.interface = lib.mkForce "127.0.0.1:${toString PORTS.VIKUNJA}";
     };
 
     gitea = {
@@ -51,6 +60,11 @@
     };
   };
 
+  systemd.services.vikunja = {
+    after = [ "postgresql.target" ];
+    requires = [ "postgresql.target" ];
+  };
+
   seta = {
     vaultwarden = {
       # The backup directory lives on external ssd.
@@ -74,36 +88,23 @@
       };
     };
 
-    leantime = {
+    vikunja = {
       critical = true;
       postgres = true;
 
-      # phpfpm-leantime is the actual unit; "leantime" does not exist as a
-      # systemd unit, so the default units = [ name ] would silently wire
-      # OnFailure to a ghost unit.
-      units = [ "phpfpm-leantime" ];
-
       dashboard = {
         enable = true;
-        name = "Leantime";
-        description = "Project management";
+        name = "Vikunja";
+        description = "Task management";
         group = "Apps";
-        icon = "leantime.png";
+        icon = "vikunja.png";
       };
 
       proxy = {
         enable = true;
-        domain = "leantime.${DOMAIN}";
-        # Placeholder: leantime speaks FastCGI over a unix socket, not HTTP.
-        # This value satisfies the required seta.proxy.port type but is never
-        # bound to. The actual handler is in proxy.config below.
-        port = PORTS.LEANTIME;
+        port = PORTS.VIKUNJA;
+        domain = "vikunja.${DOMAIN}";
         exposure = "WAN";
-        config = ''
-          root * ${config.services.leantime.package}/share/leantime/public
-          php_fastcgi unix//run/phpfpm/leantime.sock
-          file_server
-        '';
       };
     };
 

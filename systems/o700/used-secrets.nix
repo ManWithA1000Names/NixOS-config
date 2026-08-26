@@ -9,7 +9,6 @@ _: {
     # No owner: consumed only as a systemd EnvironmentFile, which PID 1 reads
     # as root before dropping privileges.
     alerting.file = ../../secrets/alerting.age;
-    leantime-session.file = ../../secrets/leantime-session.age;
 
     # The same ciphertext as `alerting` above, decrypted a second time under a
     # different owner. Netdata's alarm-notify.sh runs as the netdata user and
