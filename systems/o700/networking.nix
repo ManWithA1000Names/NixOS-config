@@ -50,20 +50,21 @@ let
   # Applied to every vhost regardless of exposure. Deliberately excludes a
   # Content-Security-Policy: a useful one has to be written per-application,
   # and a generic one breaks every app behind this proxy.
-  securityHeaders = ''
-    header {
-      # No `preload`. Preloading is baked into browser binaries and takes
-      # months to reverse; plain max-age is revocable by lowering it.
-      Strict-Transport-Security "max-age=31536000; includeSubDomains"
-      X-Content-Type-Options nosniff
-      # SAMEORIGIN rather than DENY: Netdata's dashboard and Jellyfin's web
-      # client both frame same-origin content, which DENY would break.
-      X-Frame-Options SAMEORIGIN
-      Referrer-Policy strict-origin-when-cross-origin
-      # Caddy sends no version, but no reason to name the software either.
-      -Server
-    }
-  '';
+  securityHeaders = "";
+  # ''
+  #   header {
+  #     # No `preload`. Preloading is baked into browser binaries and takes
+  #     # months to reverse; plain max-age is revocable by lowering it.
+  #     Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  #     X-Content-Type-Options nosniff
+  #     # SAMEORIGIN rather than DENY: Netdata's dashboard and Jellyfin's web
+  #     # client both frame same-origin content, which DENY would break.
+  #     X-Frame-Options SAMEORIGIN
+  #     Referrer-Policy strict-origin-when-cross-origin
+  #     # Caddy sends no version, but no reason to name the software either.
+  #     -Server
+  #   }
+  # '';
 
   vhostConfig =
     proxy:
