@@ -94,7 +94,6 @@ let
     "nftables"
     "dnsmasq"
     "dnscrypt-proxy"
-    "nfs-server"
     # Every service that has been migrated onto the centralized database now
     # fails when this one does, so its death is worth its own message rather
     # than being inferred from the pile of unrelated-looking failures that

@@ -25,10 +25,8 @@ let
       SSHD = 22;
       DNSMASQ = 53;
       CADDY_HTTP = 80;
-      RPC_BIND = 111;
       CADDY_HTTPS = 443;
       CADDY_ADMIN = 2019;
-      NFS = 2049;
       KAVITA = 5000;
       DNSCRYPT = 5335;
       MDNS = 5353;

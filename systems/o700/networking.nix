@@ -191,14 +191,6 @@ in
         # service discovery from other machines breaks.
         ip saddr ${IP.lan} udp dport ${toString PORTS.MDNS} accept comment "mDNS LAN"
 
-        # NFS, exported to exactly one peer. The export line in
-        # hardware-configuration.nix already restricts to big-boss, but sec=sys
-        # means the client list *is* the access control -- the firewall repeats
-        # it rather than trusting a single layer. NFSv4 only (see extraNfsdConfig
-        # below), so port 2049 is the entire surface: no rpcbind (111), no mountd,
-        # no statd, no lockd. Without this rule the client mount hangs rather than
-        # failing -- the most confusing NFS failure mode.
-        ip saddr ${IP.big-boss} tcp dport ${toString PORTS.NFS} accept comment "NFS to big-boss"
       '';
     };
   };
@@ -244,37 +236,6 @@ in
       # misconfiguration by quietly shipping queries to Cloudflare and Google
       # instead. Empty turns that silent bypass into a visible failure.
       settings.Resolve.FallbackDNS = [ ];
-    };
-
-    nfs = {
-      server = {
-        enable = true;
-        # Exported to big-boss alone rather than the whole LAN: sec=sys lets any
-        # host that can reach port 2049 claim any UID, so the client list *is*
-        # the access control. big-boss holds this address by way of a router
-        # reservation, and NetworkManager additionally re-requests its previous
-        # lease, so the two must be kept in step -- if it ever lands on a
-        # different address the mount fails with an access error.
-        #
-        # "mountpoint" makes exportfs skip the entry unless /mnt/ex-ssd is an
-        # actual mount. It is the second half of the removable-drive handling:
-        # if the SSD is ever unmounted while nfs-server is already up, clients
-        # get an access error instead of silently reading an empty directory
-        # and concluding the library was deleted.
-        exports = ''
-          ${PATHS.EX-SSD} ${IP.big-boss}(rw,sync,no_subtree_check,mountpoint)
-        '';
-      };
-
-      # Force NFSv4-only so the firewall surface is one port (2049) instead of
-      # five. NFSv3 additionally requires rpcbind (111) and mountd, statd and
-      # lockd on ports that are random unless pinned. If big-boss ever mounts with
-      # vers=3 it will fail loudly at mount time, which is the correct outcome.
-      #
-      # Sits under services.nfs rather than services.nfs.server, and replaces the
-      # deprecated extraNfsdConfig: `settings` covers the whole of nfs.conf, and
-      # an assertion rejects the two being set together rather than merging them.
-      settings.nfsd.vers3 = false;
     };
 
     openssh = {

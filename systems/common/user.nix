@@ -9,7 +9,6 @@
     description = "The human user.";
     isNormalUser = true;
 
-    # The UID is pinned so it stays consistent across the systems that use NFS.
     uid = 1000;
 
     # Read/write access to the shared media library at /mnt/ex-ssd/media.
@@ -24,10 +23,8 @@
   };
 
   # Shared group that owns everything under MEDIA_ROOT. Every service that
-  # touches media files runs with this as its primary group (set above),
-  # and the human user is a member too (see o700/user.nix).
-  #
-  # The GID is pinned to a fixed, known value because the NFS access requires stable IDs.
+  # touches media files runs with this as its primary group, and the human
+  # user is a member too.
   users.groups.${MEDIA_GROUP} = {
     gid = 985;
   };

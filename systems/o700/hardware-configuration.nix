@@ -103,8 +103,8 @@
   swapDevices = [ ];
 
   systemd = {
-    # The external SSD is shared by Jellyfin, the media stack and the NFS
-    # export. Its mount-point must be root-owned, otherwise
+    # The external SSD is shared by Jellyfin and the media stack. Its
+    # mount-point must be root-owned, otherwise
     # systemd-tmpfiles refuses to create anything beneath it ("unsafe path
     # transition") whenever a regular user owns the mount-point. It stays
     # group-writable by "media" so the human user can still manage the drive.
@@ -129,12 +129,7 @@
     # infrastructure.
     services =
       let
-        infraRequiresExSSD = [
-          # There is exactly one export and it lives on the SSD. Refusing to start
-          # beats exporting the empty mount-point: clients get a connection
-          # refused immediately instead of mounting a plausible-looking empty tree.
-          "nfs-server"
-        ];
+        infraRequiresExSSD = [];
 
         setaRequiresExSSD = lib.concatMap (meta: meta.units) (
           builtins.filter (meta: meta.requiresExSSD) (builtins.attrValues config.seta)
