@@ -1,4 +1,5 @@
 {
+  pkgs,
   config,
   lib,
   PORTS,
@@ -81,6 +82,12 @@
 
     odoo = {
       enable = true;
+      # Pinned to 18 rather than the channel default (odoo19). odoo19 still
+      # carries PyPDF2 3.0.1 at runtime (six CVEs: ReDoS + memory-safety in
+      # the PDF parser). odoo18 drops PyPDF2 entirely (nixpkgs
+      # pythonRemoveDeps) in favour of pypdf, which is maintained and clean.
+      # odoo19 can be revisited once nixpkgs patches its PyPDF2 dependency.
+      package = pkgs.odoo18;
       autoInit = true;
       autoInitExtraFlags = [ "--without-demo=all" ];
 
@@ -166,7 +173,7 @@
       dashboard = {
         enable      = true;
         name        = "Odoo";
-        description = "ERP / accreditation management";
+        description = "ERP";
         group       = "Apps";
         icon        = "odoo.png";
       };
