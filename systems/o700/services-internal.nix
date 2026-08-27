@@ -156,14 +156,15 @@ in
           # disable DNS-over-HTTPS on "canary" networks. Without it, Firefox
           # bypasses dnsmasq entirely regardless of DHCP settings.
           "/use-application-dns.net/"
-          # Odoo phone-home: NXDOMAIN for all runtime telemetry subdomains.
-          # Empty address → NXDOMAIN for every RR type (dnsmasq 2.86+).
-          # nightly.odoo.com is intentionally absent — nixpkgs fetches Odoo
-          # packages from there at build time and must be able to reach it.
-          "/iap.odoo.com/"
-          "/apps.odoo.com/"
-          "/partner.odoo.com/"
-          "/mail.odoo.com/"
+          # Block the entire odoo.com zone: NXDOMAIN for every subdomain.
+          # Empty address → NXDOMAIN for all RR types (dnsmasq 2.86+).
+          # A specific subdomain list doesn't hold — Odoo uses iap-services.odoo.com,
+          # iap-1.odoo.com, iap-2.odoo.com, and likely more. Zone-wide is the
+          # only robust answer.
+          # nightly.odoo.com (nixpkgs FOD source) is also caught, but nixpkgs
+          # re-fetches hit cache.nixos.org first and only fall back to origin
+          # on a cache miss, so a blocked nightly is a non-issue in practice.
+          "/odoo.com/"
         ];
 
         # address= above only ever creates an A record. Since dnsmasq 2.86 a
