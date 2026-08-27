@@ -79,6 +79,42 @@
       database.type = "postgres";
     };
 
+    odoo = {
+      enable = true;
+      autoInit = true;
+      autoInitExtraFlags = [ "--without-demo=all" ];
+
+      settings.options = {
+        # Bind loopback only — Caddy is the sole external path in.
+        http_interface = "127.0.0.1";
+        http_port      = PORTS.ODOO;
+
+        # Must be explicit: proxy_mode defaults to (domain != null), and we
+        # intentionally leave domain null so the module skips its nginx setup.
+        proxy_mode = true;
+
+        # Unix socket path → libpq uses peer auth. Our PostgreSQL has
+        # listen_addresses = "" (no TCP socket at all), so without this Odoo
+        # can't connect to the database.
+        db_host = "/run/postgresql";
+        db_user = "odoo";
+
+        list_db = false; # already the module default; explicit for clarity
+
+        # Single-process mode for the evaluation period.
+        # NOTE: Odoo's Discuss (chat) real-time features are BROKEN in this
+        # mode. To fix them two things are needed:
+        #   1. Set workers > N (Odoo docs recommend 2*(CPU cores)+1 for HTTP
+        #      workers) — this switches Odoo to multi-process mode and starts
+        #      a gevent longpolling worker on port 8072.
+        #   2. Proxy /websocket to 127.0.0.1:8072 in Caddy. The seta system
+        #      has no template for a second upstream; the simplest approach is
+        #      a `handle /websocket*` block added to the Caddy vhost generation
+        #      in networking.nix, either as a seta option or hardcoded for odoo.
+        workers = 0;
+      };
+    };
+
     opencloud = {
       enable = true;
 
@@ -119,6 +155,30 @@
   };
 
   seta = {
+    odoo = {
+      critical = true;
+
+      # The Odoo NixOS module declares its own ensureDatabases/ensureUsers.
+      # postgres = true here adds "odoo" to the central pg_dump backup run —
+      # belt-and-suspenders; the duplicated CREATE-if-not-exists is harmless.
+      postgres = true;
+
+      dashboard = {
+        enable      = true;
+        name        = "Odoo";
+        description = "ERP / accreditation management";
+        group       = "Apps";
+        icon        = "odoo.png";
+      };
+
+      proxy = {
+        enable   = true;
+        port     = PORTS.ODOO;
+        domain   = "erp.${DOMAIN}";
+        exposure = "WAN";
+      };
+    };
+
     vaultwarden = {
       # The backup directory lives on external ssd.
       requiresExSSD = true;
