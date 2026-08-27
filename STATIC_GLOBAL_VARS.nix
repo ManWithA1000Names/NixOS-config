@@ -39,7 +39,6 @@ let
       DASHBOARD = 8000;
       GITEA = 8001;
       MEALIE = 8002;
-      VIKUNJA = 8003;
       QBITTORRENT = 8080;
       JELLYFIN = 8096;
       SONARR = 8989;

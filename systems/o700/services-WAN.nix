@@ -1,7 +1,6 @@
 {
   pkgs,
   config,
-  lib,
   PORTS,
   DOMAIN,
   PATHS,
@@ -37,25 +36,6 @@
         ROCKET_PORT = PORTS.VAULTWARDEN;
         SIGNUPS_ALLOWED = false;
       };
-    };
-
-    vikunja = {
-      enable = true;
-      frontendScheme = "https";
-      frontendHostname = config.seta.vikunja.proxy.domain;
-      port = PORTS.VIKUNJA;
-      database = {
-        type = "postgres";
-        # Leading slash → libpq treats this as a unix socket directory, which
-        # selects peer authentication: the OS user "vikunja" (from DynamicUser)
-        # is the credential, so no password is needed or stored anywhere.
-        host = "/run/postgresql";
-        user = "vikunja";
-        database = "vikunja";
-      };
-      # The module defaults to ":port" (all interfaces). Loopback so caddy is
-      # the only path in; the firewall not listing this port is the second layer.
-      settings.service.interface = lib.mkForce "127.0.0.1:${toString PORTS.VIKUNJA}";
     };
 
     gitea = {
@@ -108,6 +88,30 @@
 
         list_db = false; # already the module default; explicit for clarity
 
+        # Community ships a "Publisher: Update Notification" cron (mail/data/
+        # ir_cron_data.xml) that POSTs weekly to the default
+        # http://services.odoo.com/publisher-warranty/ -- over plain HTTP. The
+        # payload (mail/models/update.py:44-61) is not a version check: it
+        # carries dbuuid, dbname, user counts, web.base.url, the installed-app
+        # list, and the acting user's company name, email and phone.
+        #
+        # It cannot be turned off from the UI -- the same data file rewrites
+        # base.ir_cron_act's domain to filter this one record out of Scheduled
+        # Actions.
+        #
+        # Pointing at a closed local port means the payload cannot leave the
+        # host even if DNS stops being a reliable choke point -- dnsmasq's
+        # odoo.com block (services-internal.nix) only binds clients that
+        # actually resolve through this host.
+        #
+        # This does NOT silence the failure. The cron calls
+        # update_notification(None); None is falsy, so both handlers take their
+        # `raise` branch rather than the silent `return False`, and a UserError
+        # traceback lands in the log weekly whether the send fails on DNS or on
+        # connection-refused. Suppressing that means disabling the cron record
+        # in the database, which is not expressible here.
+        publisher_warranty_url = "http://127.0.0.1:1/";
+
         # Single-process mode for the evaluation period.
         # NOTE: Odoo's Discuss (chat) real-time features are BROKEN in this
         # mode. To fix them two things are needed:
@@ -156,11 +160,6 @@
     };
   };
 
-  systemd.services.vikunja = {
-    after = [ "postgresql.target" ];
-    requires = [ "postgresql.target" ];
-  };
-
   seta = {
     odoo = {
       critical = true;
@@ -204,26 +203,6 @@
         enable = true;
         port = PORTS.VAULTWARDEN;
         domain = "vault.${DOMAIN}";
-        exposure = "WAN";
-      };
-    };
-
-    vikunja = {
-      critical = true;
-      postgres = true;
-
-      dashboard = {
-        enable = true;
-        name = "Vikunja";
-        description = "Task management";
-        group = "Apps";
-        icon = "vikunja.png";
-      };
-
-      proxy = {
-        enable = true;
-        port = PORTS.VIKUNJA;
-        domain = "vikunja.${DOMAIN}";
         exposure = "WAN";
       };
     };
