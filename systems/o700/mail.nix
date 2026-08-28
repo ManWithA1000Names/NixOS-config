@@ -23,7 +23,7 @@
     proxy = {
       enable = true;
       port = PORTS.MAILPIT_HTTP;
-      domain = "mailpit-internal.${DOMAIN}";
+      domain = "mail-internal.${DOMAIN}";
       exposure = "NONE";
     };
   };
