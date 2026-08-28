@@ -52,6 +52,8 @@ let
       VAULTWARDEN = 9999;
       NETDATA = 19999;
       PAPERLESS = 28981;
+      MAILPIT_SMTP = 1025;
+      MAILPIT_HTTP = 8025;
       QBITTORRENT_TORRENT = 44995;
     };
 
