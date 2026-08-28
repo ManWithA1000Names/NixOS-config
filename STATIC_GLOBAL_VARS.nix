@@ -41,6 +41,7 @@ let
       MEALIE = 8002;
       QBITTORRENT = 8080;
       JELLYFIN = 8096;
+      TINYPROXY = 8888;
       SONARR = 8989;
       # Only the proxy front door. Fullstack mode starts ~34 more listeners
       # (9100-9290 plus a few high ones, and NATS on 9233); they are internal,

@@ -4,7 +4,6 @@
   config,
   IP,
   PORTS,
-  PATHS,
   DOMAIN,
   USERNAME,
   ...
@@ -109,6 +108,16 @@ let
         ${handler}
       }
     '';
+
+  # Blocklist for the Odoo egress proxy below. One rule per line, POSIX ERE
+  # (FilterType is set to "ere"); "#" starts a comment.
+  odooFilter = pkgs.writeText "tinyproxy-odoo-filter" ''
+    # Matches odoo.com and every subdomain of it, and nothing else. The
+    # alternation anchors to a label boundary, so this catches iap.odoo.com and
+    # iap-services.odoo.com while leaving lookalikes such as xodoo.com and
+    # odoo.com.example.net alone -- which an unanchored "odoo\.com" would not.
+    (^|\.)odoo\.com$
+  '';
 in
 {
   networking = {
@@ -467,6 +476,236 @@ in
           };
         };
     };
+
+    dnsmasq = {
+      enable = true;
+
+      # Leave /etc/resolv.conf alone: systemd-resolved keeps it pointed at
+      # its loopback stub. Setting this true would have resolvconf fight
+      # resolved over the same file. This host is instead pointed at dnsmasq
+      # explicitly, via systemd.network in networking.nix.
+      resolveLocalQueries = false;
+
+      settings = {
+        # Bind explicit addresses rather than the interface. enp4s0 also
+        # carries globally routable IPv6 addresses, so binding the interface
+        # would put an open resolver on a public address -- reliably
+        # discovered and abused for DNS amplification. The firewall scopes
+        # port 53 to the LAN CIDR on top of this; neither layer is trusted
+        # alone. bind-dynamic (rather than bind-interfaces) tolerates the
+        # address not existing yet at boot, since it arrives via DHCP.
+        #
+        # Loopback is listed so this host can reach its own resolver without
+        # depending on the DHCP lease: systemd-resolved is pointed at
+        # 127.0.0.1 (see systemd.network in networking.nix). resolved's own
+        # stub occupies 127.0.0.53/127.0.0.54, not .1, so there is no
+        # conflict.
+        listen-address = [
+          IP.o700
+          "127.0.0.1"
+        ];
+        bind-dynamic = true;
+
+        # Wildcard: every name under the zone resolves to this host, matching
+        # how a wildcard TLS certificate will later cover the same names.
+        # Adding a service then needs no DNS change at all.
+        address = [
+          "/${DOMAIN}/${IP.o700}"
+          # Returning NXDOMAIN for this name is the signal Firefox uses to
+          # disable DNS-over-HTTPS on "canary" networks. Without it, Firefox
+          # bypasses dnsmasq entirely regardless of DHCP settings.
+          "/use-application-dns.net/"
+        ];
+
+        # address= above only ever creates an A record. Since dnsmasq 2.86 a
+        # query for any *other* RR type against a matched domain is forwarded
+        # upstream instead of answered NODATA, so every AAAA lookup for an
+        # internal name was being sent to the router -- disclosing the whole
+        # service inventory and costing a round trip to learn nothing. local=
+        # marks the zone as ours and answers it from local data only. The
+        # man page names this exact pairing as the fix.
+        #
+        # Not needed for use-application-dns.net: an address= with no address
+        # returns NXDOMAIN for every RR type already.
+        local = "/${DOMAIN}/";
+
+        # Split upstream. The router stays authoritative for "home": it hands
+        # that domain out as DHCP option 15 and answers from its lease table,
+        # so big-boss.home resolves there and nowhere else -- a public
+        # resolver returns NXDOMAIN for it. Every LAN client resolves through
+        # this host, so forwarding "home" anywhere else breaks name lookups
+        # network-wide, not just here.
+        #
+        # Everything else goes to the local DoH proxy. This supersedes the
+        # old "keep the query on the LAN so it survives a block on outbound
+        # 53" reasoning: DoH rides 443, which survives that at least as well.
+        no-resolv = true;
+        server = [
+          "/home/${IP.router}"
+          "127.0.0.1#${toString PORTS.DNSCRYPT}"
+        ];
+
+        cache-size = 1000;
+        domain-needed = true;
+        bogus-priv = true;
+
+        # Query log routed to a file rather than the journal. At LAN scale this
+        # is thousands of entries per hour, and the journal is now the log store
+        # itself rather than a staging area -- entries aging out of the 10G cap
+        # in monitoring.nix are gone outright, and fail2ban reads that same
+        # journal, so crowding it out costs bans rather than just history.
+        #
+        # log-facility alone would only move the destination; log-queries is
+        # what enables the logging at all, and dnsmasq defaults it off. Both are
+        # needed. The file is there for debugging strange client behaviour, and
+        # for answering "did this host resolve X" after the fact:
+        #   journalctl -f --file /var/log/dnsmasq/queries.log  (or just tail)
+        log-queries = true;
+        log-facility = "/var/log/dnsmasq/queries.log";
+      };
+    };
+
+    dnscrypt-proxy = {
+      enable = true;
+
+      settings = {
+        listen_addresses = [ "127.0.0.1:${toString PORTS.DNSCRYPT}" ];
+        server_names = [ "cloudflare" ];
+
+        # DoH specifically, not DNSCrypt. DNSCrypt runs over its own UDP
+        # protocol, which defeats the point of looking like ordinary HTTPS.
+        doh_servers = true;
+        dnscrypt_servers = false;
+
+        # Selects the transport used to reach the resolver, and has no
+        # bearing on whether AAAA records come back. IPv4 only keeps the
+        # path predictable.
+        ipv6_servers = false;
+
+        # dnsmasq already caches 1000 entries in front of this, so a second
+        # cache underneath it only adds somewhere for stale answers to hide.
+        cache = false;
+
+        # Resolves a real startup deadlock. This proxy has to look up
+        # cloudflare-dns.com (and fetch the resolver list) before it can
+        # serve anything, but the system resolver path is
+        # resolved -> dnsmasq -> this proxy, which is not listening yet.
+        # ignore_system_dns forces the router below to be used instead.
+        ignore_system_dns = true;
+        bootstrap_resolvers = [ "${IP.router}:53" ];
+      };
+    };
+
+    # The host's outbound HTTP choke point. Every service that honours the
+    # standard proxy variables egresses through here (systemd.globalEnvironment
+    # below), which buys two things: one place to block a destination by name,
+    # and -- the reason it is host-wide rather than scoped to Odoo -- a single
+    # log of what this machine actually talks to. Filter rules can then be
+    # added from evidence instead of guesswork.
+    #
+    # This replaces an address=/odoo.com/ entry in dnsmasq above. That worked,
+    # but dnsmasq is the LAN's only resolver and cannot tell a query from this
+    # host apart from one from a phone, so it took odoo.com away from every
+    # client on the network. Filtering per-host is not something this LAN's DNS
+    # can express; it is something a proxy can.
+    #
+    # Odoo is additionally denied any direct route off the host, so for that one
+    # service the proxy is compulsory rather than merely configured -- see
+    # systemd.services.odoo in services-WAN.nix.
+    tinyproxy = {
+      enable = true;
+
+      settings = {
+        # Loopback only. Nothing outside this host has any business here, and
+        # an open forward proxy on a LAN address -- let alone the globally
+        # routable IPv6 that enp4s0 also carries -- is an abuse relay. Allow
+        # restates that at the application layer so the two must both fail.
+        Listen = "127.0.0.1";
+        Port = PORTS.TINYPROXY;
+        Allow = "127.0.0.1";
+
+        # Filtering is on the request host, and tinyproxy applies it after the
+        # CONNECT branch (reqs.c:476-482), so HTTPS is matched on the CONNECT
+        # target. Nothing is decrypted and no CA has to be trusted; the filter
+        # follows the *name*, so it is unaffected by odoo.com sharing CDN
+        # addresses with unrelated sites.
+        Filter = odooFilter;
+        FilterType = "ere";
+
+        # With no ConnectPort line at all, tinyproxy permits CONNECT to *any*
+        # port (connect-ports.c:56-58), which would make this a general
+        # outbound tunnel for the one service otherwise confined to loopback --
+        # SMTP included. Now that every service is routed here this also caps
+        # the host: HTTPS on a non-443 port fails with a 403 from tinyproxy
+        # rather than silently working, so widening it is a deliberate act.
+        ConnectPort = [ 443 ];
+
+        # One line per request (reqs.c:120). This is the visibility the
+        # host-wide routing exists to produce; Info adds per-header noise
+        # without adding destinations.
+        LogLevel = "Connect";
+
+        # A file, not the journal -- deliberately, and for the same reason
+        # dnsmasq's query log was moved out above. The journal is this host's
+        # log store (capped at 10G in monitoring.nix) and fail2ban reads it, so
+        # a per-request stream crowds out bans rather than just history.
+        #
+        # Nothing rotates this yet. Watch its growth before trusting it
+        # unattended; it is one line per outbound request, host-wide.
+        LogFile = "/var/log/tinyproxy/tinyproxy.log";
+      };
+    };
   };
 
+  # The upstream module runs tinyproxy as its own user but declares no writable
+  # directory, so LogFile above has nowhere to land. LogsDirectory creates
+  # /var/log/tinyproxy owned by that user on start.
+  systemd.services.tinyproxy.serviceConfig.LogsDirectory = "tinyproxy";
+
+  # Route every service that honours the standard proxy variables through
+  # tinyproxy. This is DefaultEnvironment=, so it reaches system units only --
+  # login shells are left alone on purpose, since interactive curl/git is the
+  # operator's traffic rather than an application's and would only pollute the
+  # log this exists to produce.
+  #
+  # Note this is honoured, not enforced: a service that ignores these variables
+  # still egresses directly. Odoo is the one service held to it by force
+  # (IPAddressDeny in services-WAN.nix). Notably dnscrypt-proxy is immune --
+  # it sets its transport proxy solely from its own TOML http_proxy key
+  # (config_loader.go:109) and never from the environment, which is what keeps
+  # this from deadlocking: routing the resolver through a proxy that itself
+  # needs the resolver would not survive a boot.
+  systemd.globalEnvironment =
+    let
+      proxy = "http://127.0.0.1:${toString PORTS.TINYPROXY}";
+
+      # Traffic that never leaves the LAN must not detour through a loopback
+      # proxy: service-to-service calls, the router, and the ${DOMAIN} names
+      # that resolve straight back to this host.
+      #
+      # The individual addresses are listed *as well as* the CIDR because
+      # NO_PROXY CIDR support is not universal -- Go and python-requests parse
+      # it, curl does not.
+      noProxy = lib.concatStringsSep "," [
+        "127.0.0.1"
+        "localhost"
+        "::1"
+        IP.lan
+        IP.router
+        IP.o700
+        ".${DOMAIN}"
+        ".home"
+      ];
+    in
+    {
+      # Both cases deliberately. curl reads only the lowercase http_proxy --
+      # it ignores uppercase HTTP_PROXY because that name collides with a
+      # CGI-controlled request header -- while Go and Python prefer uppercase.
+      HTTP_PROXY = proxy;
+      HTTPS_PROXY = proxy;
+      NO_PROXY = noProxy;
+      http_proxy = proxy;
+      https_proxy = proxy;
+      no_proxy = noProxy;
+    };
 }

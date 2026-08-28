@@ -99,10 +99,11 @@
         # base.ir_cron_act's domain to filter this one record out of Scheduled
         # Actions.
         #
-        # Pointing at a closed local port means the payload cannot leave the
-        # host even if DNS stops being a reliable choke point -- dnsmasq's
-        # odoo.com block (services-internal.nix) only binds clients that
-        # actually resolve through this host.
+        # Pointing at a closed local port stops this specific payload at the
+        # source, independently of whatever else is in the way. It is the inner
+        # of two layers: the outer one is the tinyproxy egress filter
+        # (services-internal.nix), which denies the whole odoo.com zone for
+        # every request this service makes, not just this one.
         #
         # This does NOT silence the failure. The cron calls
         # update_notification(None); None is falsy, so both handlers take their
@@ -158,6 +159,33 @@
         PROXY_TLS = "false";
       };
     };
+  };
+
+  # The proxy variables themselves are host-wide now (systemd.globalEnvironment
+  # in services-internal.nix); Odoo inherits them like everything else. What
+  # stays here is the part that is specific to this service: making the proxy
+  # compulsory rather than merely configured.
+  #
+  # Every other service *honours* HTTP_PROXY and could equally ignore it --
+  # fine, since for them the proxy is there to observe traffic. Odoo is the one
+  # service actively distrusted, so it is denied any route off the host except
+  # loopback, and the proxy stops being a setting it reads and becomes the only
+  # path that exists. requests does honour it (trust_env defaults true, and the
+  # phone-home at mail/models/update.py:73 is a plain requests.post), but that
+  # is not something to depend on.
+  #
+  # Still not a blanket egress block: tinyproxy fetches on Odoo's behalf, so
+  # ordinary outbound HTTP keeps working and only the odoo.com zone is refused.
+  systemd.services.odoo.serviceConfig = {
+    # localhost covers 127.0.0.0/8 and ::1: tinyproxy outbound, and Caddy's
+    # inbound reverse-proxy connection. The PostgreSQL socket is a unix socket
+    # and is not subject to address filtering at all.
+    #
+    # NOTE: this also blocks direct outbound SMTP. smtplib does not speak HTTP
+    # proxies, so configuring Odoo email later means allowing the relay
+    # explicitly here -- it will not route itself through tinyproxy.
+    IPAddressDeny = "any";
+    IPAddressAllow = "localhost";
   };
 
   seta = {
