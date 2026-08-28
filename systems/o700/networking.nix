@@ -447,9 +447,16 @@ in
           # Exists purely so caddy manages a wildcard cert. Caddy skips
           # per-name certs for any subject a managed wildcard covers, so every
           # single-label service host above shares this one cert -- which is
-          # why seta.<svc>.proxy.domain must stay single-label. The
-          # Cloudflare DNS-01 provider issues the cert with both `*.${DOMAIN}`
-          # and `${DOMAIN}` as SANs, so the apex vhost above also reuses it.
+          # why seta.<svc>.proxy.domain must stay single-label.
+          #
+          # The apex does NOT share it. A wildcard covers one label and does
+          # not match the bare parent, so caddy manages two certificates here:
+          # CN=${DOMAIN} with SAN `DNS:${DOMAIN}`, and CN=*.${DOMAIN} with SAN
+          # `DNS:*.${DOMAIN}` -- separate serials, disjoint SAN sets, renewed
+          # independently. Confirmed over the wire 2026-08-28; this comment
+          # previously claimed a single cert carrying both names, which is why
+          # the x509check jobs in monitoring/netdata.nix watch both.
+          #
           # Exact hosts still win at routing time, so this only catches
           # subdomains with no service.
           "${DOMAIN}" = {

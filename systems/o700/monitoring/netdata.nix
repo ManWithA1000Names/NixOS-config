@@ -212,6 +212,52 @@
             update_every: 60
       '';
 
+      # Certificate expiry. Caddy renews silently and fails silently: a broken
+      # renewal leaves the unit active and the old certificate still being
+      # served, so the OnFailure= wiring in notify.nix never fires and the
+      # first signal is a browser error. Nothing else here would catch it --
+      # host-audit checks backups, SUID and authorized_keys, and netdata ships
+      # no x509check job by default (conf.d has the module enabled but every
+      # job commented out, and there is no service discovery for it), so the
+      # stock health template has no chart to attach to and silently never
+      # instantiates.
+      #
+      # Two jobs because caddy manages two certificates here, not one. Verified
+      # over the wire 2026-08-28: the apex serves CN=o700.net with SAN
+      # `DNS:o700.net` alone, the vhosts serve CN=*.o700.net with SAN
+      # `DNS:*.o700.net` alone -- different serials, disjoint SAN sets, and a
+      # wildcard does not match the bare parent label. Watching one would leave
+      # the other unmonitored.
+      #
+      # Checked over the wire rather than by reading the .crt files: caddy's
+      # StateDirectory is 0700 caddy so the netdata user cannot read them, and
+      # what matters anyway is the certificate being *served* rather than the
+      # newest one on disk -- those differ if a renewal succeeds but the reload
+      # does not.
+      #
+      # Names must be ones a vhost actually claims. Requests for unclaimed
+      # names fall through to the `*.${DOMAIN}` catch-all, which answers 404,
+      # and the caddy-scan jail in networking.nix bans on accumulated 404s.
+      #
+      # update_every for the same reason as fail2ban above: the interval is set
+      # against what the data does, not what the collector defaults to. These
+      # are 90-day certificates and the alarm threshold is in days, so hourly
+      # is already three orders of magnitude faster than the value can move.
+      # Stock health.d/x509check.conf warns under 14 days and goes critical
+      # under 7 -- against Let's Encrypt renewing at 30 days remaining, so a
+      # warning means renewal has been failing for a fortnight. It is
+      # `to: webmaster`, and the stock config leaves every role falling back to
+      # DEFAULT_RECIPIENT_TELEGRAM, which is set below.
+      "go.d/x509check.conf" = pkgs.writeText "x509check.conf" ''
+        jobs:
+          - name: apex
+            source: https://${DOMAIN}:443
+            update_every: 3600
+          - name: wildcard
+            source: https://home.${DOMAIN}:443
+            update_every: 3600
+      '';
+
       # alarm-notify.sh sources the stock health_alarm_notify.conf first and
       # this one second, so only the overridden keys need to appear here; every
       # other notification method keeps its stock (disabled) default.
