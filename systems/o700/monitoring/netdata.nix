@@ -74,6 +74,16 @@
 
     config = {
       plugins = {
+        # No BMC on this board -- there is no /dev/ipmi0, so libipmimonitoring
+        # cannot find an in-band device and the plugin logs
+        # `ipmi_monitoring_*(): internal error` every 30s for ten minutes after
+        # each start before netdata disables it with "0 successful data
+        # collections". That replays on every boot and every netdata restart.
+        # Unlike systemd-journal below this is not a gating problem: IPMI
+        # telemetry comes from a service processor this hardware does not have,
+        # so no configuration could ever make it produce data.
+        "freeipmi" = "no";
+
         # Disabled because what it exists to serve cannot be reached. The
         # journal browser is a Function, and Functions need a Netdata Cloud
         # bearer this host will never hold (see the header). Left enabled it is
