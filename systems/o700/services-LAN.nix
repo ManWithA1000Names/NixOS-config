@@ -26,6 +26,15 @@
       port = PORTS.PAPERLESS;
       domain = "${config.seta.paperless.proxy.domain}";
 
+      # The list of proxies whose X-Forwarded-For paperless will believe.
+      # Upstream names it as the setting needed "to prevent IP address spoofing
+      # if you are using e.g. fail2ban". Caddy is the only hop.
+      #
+      # PAPERLESS_URL is not needed alongside it: the module already derives it
+      # from `domain` above, and that one variable covers ALLOWED_HOSTS,
+      # CORS_ALLOWED_HOSTS and CSRF_TRUSTED_ORIGINS.
+      settings.PAPERLESS_TRUSTED_PROXIES = "127.0.0.1";
+
       database.createLocally = true;
     };
 

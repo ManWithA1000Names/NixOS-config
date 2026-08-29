@@ -52,7 +52,18 @@
           # failed. Defence in depth is only depth if the layers fail
           # independently, and a bad nftables ruleset does not move a listener.
           HTTP_ADDR = "127.0.0.1";
+
+          # The module derives this as http://<DOMAIN>:<HTTP_PORT>/, which here
+          # is the loopback port over plain http -- a URL that resolves for
+          # nobody. Gitea bakes ROOT_URL into the clone URLs it displays, its
+          # webhook targets, OAuth redirects and outbound email links, so it has
+          # to be the public name rather than the address it happens to bind.
+          ROOT_URL = "https://${config.seta.gitea.proxy.domain}/";
         };
+
+        # The session cookie is only ever presented over caddy's TLS, so mark it
+        # Secure and let the browser refuse to send it in cleartext.
+        session.COOKIE_SECURE = true;
 
         service.DISABLE_REGISTRATION = true;
       };

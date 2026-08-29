@@ -64,18 +64,39 @@ let
     }
   '';
 
+  # Applied to every vhost, ahead of the per-service headers.
+  #
+  # Caddy *appends* to a client-supplied X-Forwarded-For rather than replacing
+  # it, and forwards a client-supplied X-Real-IP untouched. So without these, a
+  # request carrying its own X-Real-IP decides what vaultwarden logs and
+  # rate-limits on (IP_HEADER defaults to X-Real-IP), and one carrying its own
+  # X-Forwarded-For decides it for any backend that reads the leftmost entry.
+  # Overwriting both makes the address this host actually observed the only one
+  # a backend can see, whatever its parsing does.
+  #
+  # Safe to set unconditionally only because caddy is the edge here: there is no
+  # upstream proxy whose forwarded value would be discarded. That stops being
+  # true the moment anything fronts this host -- same trigger as the Cloudflare
+  # warning on the caddy-badauth jail below.
+  forwardedHeaders = {
+    "X-Forwarded-For" = "{http.request.remote.host}";
+    "X-Real-IP" = "{http.request.remote.host}";
+  };
+
   vhostConfig =
     proxy:
     let
+      # Per-service headers last, so a service can still override: qbittorrent
+      # replaces Host, and anything here could need the same treatment.
       headerLines =
-        lib.mapAttrsToList (k: v: "header_up ${k} ${v}") proxy.headers
+        lib.mapAttrsToList (k: v: "header_up ${k} ${v}") (forwardedHeaders // proxy.headers)
         ++ map (k: "header_up -${k}") proxy.removeHeaders;
 
+      # No bare `reverse_proxy` form any more: forwardedHeaders makes headerLines
+      # non-empty for every service that goes through this template.
       handler =
         if proxy.config != "" then
           proxy.config
-        else if headerLines == [ ] then
-          "reverse_proxy localhost:${toString proxy.port}"
         else
           ''
             reverse_proxy localhost:${toString proxy.port} {
@@ -337,10 +358,14 @@ in
           settings = {
             # backend = "systemd" is the module default, same as the sshd jail.
             journalmatch = "_SYSTEMD_UNIT=caddy.service";
-            # Strict. A 401 or 403 is unambiguous -- credentials were presented
-            # and rejected -- so there is no innocent explanation for a run of
-            # them, unlike the 404s the caddy-scan jail counts.
-            maxretry = 4;
+            # A 401 is not always a rejected login. Under OAuth/OIDC it is the
+            # protocol's "token expired, go refresh" signal, so a client with
+            # several requests in flight emits a burst of them in well under a
+            # second and then recovers on its own. OpenCloud's Android client
+            # tripped the old maxretry = 4 with exactly such a burst. The
+            # headroom here covers that shape of false positive generically,
+            # since any bearer-token app on this host can produce it.
+            maxretry = 10;
             findtime = "10m";
           };
           filter.Definition = {
@@ -381,6 +406,84 @@ in
             # Same remote_ip caveat as caddy-badauth above regarding the
             # Cloudflare orange cloud.
             failregex = ''^.*"remote_ip":"<HOST>".*"status":404.*$'';
+            ignoreregex = "";
+          };
+        };
+
+        # --- Per-application jails ------------------------------------------
+        #
+        # The two caddy jails above see status codes and nothing else, so they
+        # are blind to the failure mode that matters most: these applications
+        # answer a rejected login with HTTP 200 and put the refusal in the body.
+        # A password-guessing run against vaultwarden is, to caddy, a series of
+        # successful requests.
+        #
+        # All three read the journal rather than a file. That is not just house
+        # style -- each of these services logs to stdout under its nixos module,
+        # so the journal is where the lines already are, and adding a file would
+        # mean a second copy plus rotation for it.
+        #
+        # Every failregex here is upstream's own, and each keys on the address
+        # the *application* believes it is talking to. That address is only the
+        # real client because of the forwardedHeaders block at the top of this
+        # file; without it all three would match 127.0.0.1 and ban the proxy.
+        # ignoreIP saves the host from itself, so the visible symptom would be a
+        # jail that never bans anything rather than an outage -- which is why
+        # the fail2ban-regex check matters before trusting these.
+
+        # https://github.com/dani-garcia/vaultwarden/wiki/Fail2Ban-Setup
+        vaultwarden = {
+          settings = {
+            journalmatch = "_SYSTEMD_UNIT=vaultwarden.service";
+            # Upstream's number. A wrong password on a password manager is
+            # plausible twice, not four times.
+            maxretry = 3;
+            findtime = "10m";
+            # Same reasoning as the sshd jail: someone brute-forcing the vault
+            # has no business holding any other port either.
+            action = "%(banaction_allports)s[name=vaultwarden]";
+          };
+          filter.Definition = {
+            failregex = ''^.*Username or password is incorrect\. Try again\. IP: <ADDR>\. Username:.*$'';
+            ignoreregex = "";
+          };
+        };
+
+        # https://docs.gitea.com/administration/fail2ban-setup
+        gitea = {
+          settings = {
+            journalmatch = "_SYSTEMD_UNIT=gitea.service";
+            # Upstream's 10 rather than the global 4: git clients retry with
+            # credentials on their own, so a wrong stored password produces a
+            # burst without anyone typing anything.
+            maxretry = 10;
+            findtime = "1h";
+            action = "%(banaction_allports)s[name=gitea]";
+          };
+          filter.Definition = {
+            failregex = ''.*(Failed authentication attempt|invalid credentials|Attempted access of unknown user).* from <HOST>'';
+            ignoreregex = "";
+          };
+        };
+
+        # https://jellyfin.org/docs/general/post-install/networking/advanced/fail2ban/
+        #
+        # Depends on two things outside this file: jellyfin's log level being
+        # Info (its default -- denied auth is not logged at Error), and "Known
+        # Proxies" naming 127.0.0.1 in Dashboard -> Networking. Jellyfin
+        # discards forwarded headers from anything not listed there by design,
+        # so until that is set this jail sees the proxy on every line. That
+        # setting lives in network.xml and the nixos module exposes no option
+        # for it, so it stays a manual step.
+        jellyfin = {
+          settings = {
+            journalmatch = "_SYSTEMD_UNIT=jellyfin.service";
+            maxretry = 3;
+            findtime = "10m";
+            action = "%(banaction_allports)s[name=jellyfin]";
+          };
+          filter.Definition = {
+            failregex = ''^.*Authentication request for .* has been denied \(IP: "<ADDR>"\)\.'';
             ignoreregex = "";
           };
         };
