@@ -239,10 +239,17 @@
       # names fall through to the `*.${DOMAIN}` catch-all, which answers 404,
       # and the caddy-scan jail in networking.nix bans on accumulated 404s.
       #
-      # update_every for the same reason as fail2ban above: the interval is set
-      # against what the data does, not what the collector defaults to. These
-      # are 90-day certificates and the alarm threshold is in days, so hourly
-      # is already three orders of magnitude faster than the value can move.
+      # update_every is a display constraint here, not a data one. The stock
+      # default is go.d's 1s floored to the 5s in [db] above -- a TLS handshake
+      # against caddy every five seconds for a value that moves one second per
+      # second. Hourly was the first attempt: it collected correctly for 26
+      # hours while charting nothing, because the dashboard's default view is
+      # the last 15 minutes and 39 of every 40 such windows contain no stored
+      # point. Verified 2026-08-29 -- an absolute query for that window returns
+      # zero points, while a relative one clamps back to the last on-the-hour
+      # sample and looks healthy, which is how the API hid this. 60s puts 15
+      # points in the default window.
+      #
       # Stock health.d/x509check.conf warns under 14 days and goes critical
       # under 7 -- against Let's Encrypt renewing at 30 days remaining, so a
       # warning means renewal has been failing for a fortnight. It is
@@ -252,10 +259,10 @@
         jobs:
           - name: apex
             source: https://${DOMAIN}:443
-            update_every: 3600
+            update_every: 60
           - name: wildcard
             source: https://home.${DOMAIN}:443
-            update_every: 3600
+            update_every: 60
       '';
 
       # alarm-notify.sh sources the stock health_alarm_notify.conf first and
