@@ -151,11 +151,37 @@
         # root, so naming ourselves keeps the iframe same-origin; it answers
         # "disabled", the dashboard logs a console error, and nothing else
         # changes.
-        "registry to announce" = "https://netdata.${DOMAIN}";
+        "registry to announce" = "https://${config.seta.netdata.proxy.domain}";
       };
     };
 
     configDir = {
+      # Netdata Cloud, off at the source. `package` above is netdataCloud, so
+      # the ACLK is compiled in and one claim token is all that stands between
+      # this agent and a persistent outbound connection to app.netdata.cloud.
+      #
+      # This is the layer that actually holds, and it is the innermost of three.
+      # Behind it is seta.netdata.networkConfinement, which leaves this unit no
+      # peer but loopback and the LAN -- app.netdata.cloud is a public address,
+      # so a direct socket to it has nowhere to go. Outermost is the
+      # netdata.cloud entry in the tinyproxy filter (networking.nix), and that
+      # one is the weakest: the ACLK is MQTT over WebSocket with its own proxy
+      # setting in this same file, not an HTTP request that inherits HTTP_PROXY,
+      # so it might never issue a CONNECT for the filter to match. It would then
+      # fail at confinement rather than escape -- but it would fail silently, so
+      # the proxy log is not where to look for evidence either way.
+      #
+      # enableAnalyticsReporting = false above is a third, separate thing: it
+      # covers the anonymous telemetry POST, not the cloud link.
+      #
+      # Netdata writes claim state into this file, so with it a store symlink
+      # claiming becomes impossible rather than merely disabled -- an attempt
+      # fails on a read-only path instead of silently succeeding.
+      "cloud.conf" = pkgs.writeText "cloud.conf" ''
+        [global]
+            enabled = no
+      '';
+
       # The centralized postgres, declared rather than discovered. go.d's
       # net_listeners service discovery already finds anything on 5432 and
       # tries three template DSNs against it; naming the job here means the
@@ -299,6 +325,21 @@
   # +-----------------------------------------------------------------+
 
   seta.netdata = {
+    # Confined by default like every other seta service, and the two things
+    # that could have broken both survive:
+    #
+    #   x509check reaches https://${DOMAIN} and https://home.${DOMAIN}, which
+    #   resolve to this host's LAN address rather than loopback. Inside the
+    #   default allow list because that list is the /24.
+    #
+    #   Telegram alerts go out through alarm-notify.sh, which is curl, which
+    #   inherits this unit's environment and so uses tinyproxy.
+    #
+    # The second of those is worth re-checking by hand after any change here.
+    # Netdata is the alarm system, so a confinement mistake that silences
+    # notifications also silences the thing that would have reported it --
+    # unlike every other service, this one fails quietly. Fire a test alarm
+    # rather than waiting to be told.
     proxy = {
       enable = true;
       port = PORTS.NETDATA;

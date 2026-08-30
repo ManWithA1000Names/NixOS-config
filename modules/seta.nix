@@ -1,4 +1,11 @@
-{ lib, DOMAIN, ... }: {
+{
+  config,
+  lib,
+  DOMAIN,
+  IP,
+  ...
+}:
+{
   options.seta = lib.mkOption {
     default = { };
     description = "Service mETA data.";
@@ -167,6 +174,78 @@
               type = lib.types.bool;
             };
 
+            networkConfinement = lib.mkOption {
+              default = { };
+
+              description = ''
+                Hold this service to the egress proxy instead of trusting it to
+                honour HTTP_PROXY.
+
+                systemd.globalEnvironment (networking.nix) points every unit at
+                tinyproxy, but that is a setting a service reads, not a route it
+                is bound to -- a service that ignores the variables egresses
+                directly and the proxy log never sees it. Applying
+                IPAddressDeny/IPAddressAllow to every unit in `units` removes
+                the alternative, so the proxy becomes the only path off the host
+                that exists.
+
+                On by default. The services that cannot take it are the ones
+                whose traffic is not HTTP at all, and they say so explicitly --
+                see qbittorrent (services-internal.nix) and mailpit (mail.nix).
+              '';
+
+              type = lib.types.submodule {
+                options = {
+                  enable = lib.mkOption {
+                    type = lib.types.bool;
+                    default = true;
+                    description = ''
+                      Deny this service every route off the host except `allow`.
+
+                      Defaulting to true rather than false is deliberate and is
+                      the opposite of how `exposure` is handled: a service that
+                      forgets to declare this gets the *safe* answer, and the
+                      failure mode is a service that visibly cannot reach
+                      something rather than one quietly egressing unobserved.
+                    '';
+                  };
+
+                  allow = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [
+                      "localhost"
+                      IP.lan
+                    ];
+                    description = ''
+                      Peer addresses this service may still reach, and be
+                      reached from. Setting this replaces the default rather
+                      than adding to it, so an extending service repeats the two
+                      entries below.
+
+                      `localhost` is systemd's own alias for 127.0.0.0/8 plus
+                      ::1, which covers tinyproxy outbound, caddy's inbound
+                      reverse-proxy connection, the systemd-resolved stub and
+                      the PostgreSQL socket's TCP twin. Unix sockets are not
+                      address-filtered at all, so socket-based collectors and
+                      peer-auth database connections are unaffected either way.
+
+                      IP.lan is the /24 and not IP.o700/32, because this filter
+                      matches the *peer* address in both directions. Outbound it
+                      is what lets netdata's x509check reach the names caddy
+                      serves on this host's LAN address; inbound it is what lets
+                      house clients reach jellyfin at all. Narrowed to a single
+                      /32 the inbound half would black-hole every device on the
+                      network.
+
+                      Nothing here weakens the egress goal: LAN peers are not
+                      the internet, and the only route past this list is
+                      tinyproxy on loopback.
+                    '';
+                  };
+                };
+              };
+            };
+
             critical = lib.mkOption {
               default = false;
 
@@ -187,4 +266,42 @@
       )
     );
   };
+
+  # Every name in `units` must be a unit that something actually defines.
+  #
+  # This exists because the failure mode is silent and has already happened
+  # twice. `units` defaults to [ name ], which is wrong whenever the upstream
+  # module names its units differently -- paperless ships four units and no
+  # bare `paperless`, mailpit names its units after the instance. In both cases
+  # every consumer here hangs its config off a unit that does not exist, and
+  # systemd's module system is happy to synthesise an empty one, so critical
+  # stops notifying, requiresExSSD stops gating and networkConfinement stops
+  # confining, all without a single error.
+  #
+  # The check is for ExecStart rather than mere presence, and that distinction
+  # is the whole point: the consumers *themselves* create the attribute. By the
+  # time this runs, networking.nix has already written
+  # systemd.services.mailpit.serviceConfig, so `? "mailpit"` is true even when
+  # no such service exists. A real unit has a command to run; a synthesised one
+  # has only whatever we hung off it. One check covers both spellings of that
+  # command, because the submodule turns `script` into serviceConfig.ExecStart
+  # (nixos/lib/systemd-unit-options.nix:497-503).
+  #
+  # A unit that legitimately has no ExecStart -- ExecStop-only, or a target --
+  # would be a false positive. None exist here, and the fix would be to name a
+  # real unit anyway.
+  config.assertions = lib.concatLists (
+    lib.mapAttrsToList (
+      svc: meta:
+      map (unit: {
+        assertion = (config.systemd.services.${unit} or null) ? serviceConfig.ExecStart;
+        message = ''
+          seta.${svc}.units names "${unit}", which is not a systemd service defined by this
+          configuration. Check what the upstream module actually calls its units and set
+          seta.${svc}.units explicitly -- leaving it at the default of [ "${svc}" ] silently
+          disables critical, requiresExSSD and networkConfinement for this service.
+        '';
+      }) meta.units
+    ) config.seta
+  );
 }

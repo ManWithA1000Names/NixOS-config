@@ -130,14 +130,50 @@ let
       }
     '';
 
-  # Blocklist for the Odoo egress proxy below. One rule per line, POSIX ERE
+  # Blocklist for the egress proxy below. One rule per line, POSIX ERE
   # (FilterType is set to "ere"); "#" starts a comment.
-  odooFilter = pkgs.writeText "tinyproxy-odoo-filter" ''
+  #
+  # This is one global list. tinyproxy has no per-client filter and every client
+  # here is 127.0.0.1, so every entry applies to every service on the host --
+  # "block this name for one app only" is not expressible. It was odooFilter
+  # while Odoo was the only client; the proxy went host-wide in 5fc36fc and the
+  # name stopped describing it.
+  egressFilter = pkgs.writeText "tinyproxy-egress-filter" ''
     # Matches odoo.com and every subdomain of it, and nothing else. The
     # alternation anchors to a label boundary, so this catches iap.odoo.com and
     # iap-services.odoo.com while leaving lookalikes such as xodoo.com and
     # odoo.com.example.net alone -- which an unanchored "odoo\.com" would not.
     (^|\.)odoo\.com$
+
+    # Kavita's anonymous usage telemetry. Kavita does have an in-app toggle for
+    # this, but it lives in Kavita's SQLite database, where no rebuild can
+    # assert it and a restored backup can quietly revert it.
+    ^stats\.kavitareader\.com$
+
+    # Gravatar. Gitea (federated avatars default on) and Jellyseerr both resolve
+    # user avatars by sending an MD5 of the user's email address to Automattic
+    # on every render. Both degrade to locally generated avatars.
+    ^www\.gravatar\.com$
+
+    # Netdata Cloud, pre-emptively -- nothing has requested it, this is here so
+    # a future claim cannot happen quietly. Outermost of three layers, and still
+    # the least reliable of them: the ACLK is MQTT over WebSocket and takes its
+    # proxy from netdata's own config key rather than from HTTP_PROXY, so if it
+    # ever ran it might never issue a CONNECT for this list to match.
+    #
+    # It would not escape, though -- it would fail earlier. netdata is confined
+    # (seta.netdata.networkConfinement), so a direct socket to app.netdata.cloud
+    # has no route: the allow list is loopback and the LAN, and reaching a public
+    # address means a public peer regardless of which box forwards the packet.
+    # That is the second layer. The one that holds is `cloud.conf` in
+    # monitoring/netdata.nix, which stops the link from starting at all.
+    (^|\.)netdata\.cloud$
+
+    # Firebase Cloud Messaging, Google's push relay. Blocked without having
+    # established which service uses it -- the candidates are Odoo's web push
+    # (VAPID; Chrome's endpoint is FCM) and Vaultwarden. If push notifications
+    # stop arriving somewhere, this is the first thing to suspect.
+    ^fcm\.googleapis\.com$
   '';
 in
 {
@@ -719,9 +755,10 @@ in
     # client on the network. Filtering per-host is not something this LAN's DNS
     # can express; it is something a proxy can.
     #
-    # Odoo is additionally denied any direct route off the host, so for that one
-    # service the proxy is compulsory rather than merely configured -- see
-    # systemd.services.odoo in services-WAN.nix.
+    # Odoo was once the only service additionally denied a direct route off the
+    # host. That is now the default for everything in the seta manifest --
+    # seta.<svc>.networkConfinement, applied below -- so the proxy is compulsory
+    # rather than merely configured for all but the two services that opt out.
     tinyproxy = {
       enable = true;
 
@@ -739,7 +776,7 @@ in
         # target. Nothing is decrypted and no CA has to be trusted; the filter
         # follows the *name*, so it is unaffected by odoo.com sharing CDN
         # addresses with unrelated sites.
-        Filter = odooFilter;
+        Filter = egressFilter;
         FilterType = "ere";
 
         # With no ConnectPort line at all, tinyproxy permits CONNECT to *any*
@@ -767,10 +804,38 @@ in
     };
   };
 
-  # The upstream module runs tinyproxy as its own user but declares no writable
-  # directory, so LogFile above has nowhere to land. LogsDirectory creates
-  # /var/log/tinyproxy owned by that user on start.
-  systemd.services.tinyproxy.serviceConfig.LogsDirectory = "tinyproxy";
+  systemd.services = lib.mkMerge (
+    [
+      # The upstream module runs tinyproxy as its own user but declares no
+      # writable directory, so LogFile above has nowhere to land. LogsDirectory
+      # creates /var/log/tinyproxy owned by that user on start.
+      { tinyproxy.serviceConfig.LogsDirectory = "tinyproxy"; }
+    ]
+
+    # The enforcement half of the proxy story below: globalEnvironment asks
+    # every service to use tinyproxy, and this leaves the ones that opted in
+    # with no other route to ignore it with. Driven off
+    # seta.<svc>.networkConfinement (modules/seta.nix), which defaults to on, so
+    # this list is every seta service except the two that say otherwise.
+    #
+    # Deliberately hung off `units` rather than the seta key: a service whose
+    # real unit is named differently would otherwise have systemd synthesise an
+    # empty unit and silently confine nothing, which is the same failure the
+    # paperless note in services-LAN.nix describes.
+    #
+    # Nothing here touches the networking services -- caddy, dnsmasq,
+    # dnscrypt-proxy, fail2ban and sshd have no seta entry, and confining the
+    # resolver in particular would deadlock the boot for the reason given below.
+    ++ map (
+      meta:
+      lib.genAttrs meta.units (_: {
+        serviceConfig = {
+          IPAddressDeny = "any";
+          IPAddressAllow = meta.networkConfinement.allow;
+        };
+      })
+    ) (builtins.filter (meta: meta.networkConfinement.enable) (builtins.attrValues config.seta))
+  );
 
   # Route every service that honours the standard proxy variables through
   # tinyproxy. This is DefaultEnvironment=, so it reaches system units only --
@@ -778,9 +843,17 @@ in
   # operator's traffic rather than an application's and would only pollute the
   # log this exists to produce.
   #
-  # Note this is honoured, not enforced: a service that ignores these variables
-  # still egresses directly. Odoo is the one service held to it by force
-  # (IPAddressDeny in services-WAN.nix). Notably dnscrypt-proxy is immune --
+  # On its own this is honoured, not enforced: a service that ignores these
+  # variables egresses directly and the proxy log never sees it. That gap is
+  # closed above rather than here -- seta.<svc>.networkConfinement denies every
+  # route off the host except loopback and the LAN, which turns the proxy from a
+  # setting a service reads into the only path that exists. The variables still
+  # matter: confinement says *no other route*, this says *which route*, and a
+  # confined service with no proxy configured simply fails.
+  #
+  # The exemptions are the services whose traffic is not HTTP and so could never
+  # traverse an HTTP proxy: qbittorrent (BitTorrent peers and DHT) and mailpit
+  # (SMTP to a real relay). Notably dnscrypt-proxy is immune --
   # it sets its transport proxy solely from its own TOML http_proxy key
   # (config_loader.go:109) and never from the environment, which is what keeps
   # this from deadlocking: routing the resolver through a proxy that itself
@@ -814,8 +887,21 @@ in
       HTTP_PROXY = proxy;
       HTTPS_PROXY = proxy;
       NO_PROXY = noProxy;
+
       http_proxy = proxy;
       https_proxy = proxy;
       no_proxy = noProxy;
+
+      # Node reads none of the above. Verified on nodejs 22.23.2 -- the runtime
+      # seerr is built against -- by pointing HTTP_PROXY at one closed port and
+      # the request at another: both http.request and global fetch connect
+      # straight to the origin, and only reach the proxy with this set.
+      #
+      # Libraries that bring their own env handling are unaffected either way;
+      # axios inlines proxy-from-env and is why Node services here work at all
+      # today. This covers the ones built on bare fetch/undici, which is where
+      # new Node code is heading. Unknown to every other runtime on this host,
+      # so setting it globally costs nothing.
+      NODE_USE_ENV_PROXY = "1";
     };
 }

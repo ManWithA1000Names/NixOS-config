@@ -116,6 +116,21 @@ in
       settings.server.port = PORTS.SONARR;
       settings.server.bindaddress = "127.0.0.1";
     };
+
+    mailpit.instances.main = {
+      # Relative path: lands in /var/lib/mailpit-main/mailpit.db, survives rebuilds.
+      database = "mailpit.db";
+
+      # Loopback only. Application services point their SMTP config here;
+      # nothing outside this host should submit mail.
+      smtp = "127.0.0.1:${toString PORTS.MAILPIT_SMTP}";
+
+      # Loopback only. Caddy proxies this via the seta entry below.
+      listen = "127.0.0.1:${toString PORTS.MAILPIT_HTTP}";
+
+      # Prune oldest messages once this limit is reached. 0 = unlimited.
+      max = 500;
+    };
   };
 
   seta = {
@@ -139,6 +154,19 @@ in
 
     qbittorrent = {
       requiresExSSD = true;
+
+      # The one service here that cannot be held to the egress proxy, and not
+      # because it would be inconvenient: BitTorrent is peer-to-peer TCP/uTP to
+      # thousands of arbitrary addresses plus a UDP DHT, none of which is HTTP
+      # and none of which an HTTP CONNECT proxy can carry. Confining it would
+      # not route its traffic through tinyproxy, it would leave it with no
+      # transport at all.
+      #
+      # The cost is real and worth stating: this is the one seta service whose
+      # outbound connections never appear in the proxy log. Its tracker
+      # announces are HTTP and would have, but they are not separable from the
+      # peer traffic here.
+      networkConfinement.enable = false;
 
       proxy = {
         enable = true;
@@ -173,6 +201,33 @@ in
         enable = true;
         port = PORTS.SONARR;
         domain = "sonarr-internal.${DOMAIN}";
+        exposure = "NONE";
+      };
+    };
+
+    mailpit = {
+      # The module names its units after the instance -- `mailpit-${name}`, so
+      # `main` above is mailpit-main.service. The `units` default of [ name ] would
+      # name mailpit.service, which does not exist, and systemd would synthesise
+      # an empty unit for it and quietly apply nothing. Same failure the paperless
+      # note in services-LAN.nix describes.
+      units = [ "mailpit-main" ];
+
+      # Exempt for the same structural reason as qbittorrent: mailpit's outbound
+      # job is SMTP to a real mail service, and SMTP cannot traverse an HTTP
+      # proxy. It is the far side of the mail path -- every other service submits
+      # to it over loopback and stays confined, and this is the single hop that
+      # has to leave the host.
+      #
+      # No relay is configured yet, so today it accepts and stores and sends
+      # nothing. The exemption is here so that turning one on is a mail change
+      # rather than a mail change plus an egress change.
+      networkConfinement.enable = false;
+
+      proxy = {
+        enable = true;
+        port = PORTS.MAILPIT_HTTP;
+        domain = "mail-internal.${DOMAIN}";
         exposure = "NONE";
       };
     };

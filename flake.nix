@@ -58,7 +58,6 @@
           ./systems/o700/services-LAN.nix
           ./systems/o700/services-WAN.nix
           ./systems/o700/services-internal.nix
-          ./systems/o700/mail.nix
           ./systems/o700/hardware-configuration.nix
         ];
       };

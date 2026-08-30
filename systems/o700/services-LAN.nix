@@ -111,6 +111,17 @@
       critical = true;
       requiresExSSD = true;
 
+      # Confined like everything else, which is only safe because the default
+      # allow list is the LAN /24 rather than this host's own address. Jellyfin
+      # binds 0.0.0.0 and is the one service here that house clients reach
+      # directly, and IPAddressAllow matches the *peer*: narrowed to a /32 the
+      # inbound half of this filter would refuse every TV and phone on the
+      # network while looking, from the config, like an egress rule.
+      #
+      # Outbound it needs metadata providers, and .NET's
+      # HttpClient.DefaultProxy reads HTTP_PROXY on Unix, so those already go
+      # through tinyproxy.
+
       dashboard = {
         enable = true;
         name = "Jellyfin";
