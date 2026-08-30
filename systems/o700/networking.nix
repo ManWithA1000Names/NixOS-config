@@ -112,9 +112,25 @@ let
       # confirm it is there and worth coming back to. The request is logged
       # either way, so blocked attempts remain visible in the journal, and
       # the caddy-scan jail below counts them.
+      #
+      # log_append marks the line so the caddy-exposure jail can act on "turned
+      # away by the guard" rather than on the bare 404, which is ambiguous --
+      # every application here emits 404s of its own, which is why caddy-scan
+      # has to sit at 40 hits. Marking it at the point the decision is made,
+      # rather than regexing the hostname downstream, keeps it generic: it
+      # covers LAN vhosts as well as NONE ones and does not depend on the
+      # *-internal naming convention holding.
+      #
+      # `handle` rather than a bare `respond`, because log_append has a fixed
+      # position in Caddy's directive order and the two must fire as one unit.
+      # Sibling to the handler below inside the same `route`: a request that
+      # does not match @blocked falls through to it unchanged.
       guard = lib.optionalString (sources != [ ]) ''
         @blocked not remote_ip ${lib.concatStringsSep " " sources}
-        respond @blocked 404
+        handle @blocked {
+          log_append ban_reason "exposure-guard"
+          respond 404
+        }
       '';
     in
     # `route` wraps the handler so evaluation follows written order. Outside a
@@ -175,6 +191,39 @@ let
     # stop arriving somewhere, this is the first thing to suspect.
     ^fcm\.googleapis\.com$
   '';
+
+  # Ban scope for the two marker-driven caddy jails below, which are tight
+  # enough (1 and 5 hits) that a false positive is a realistic outcome rather
+  # than a theoretical one.
+  #
+  # Every other jail here bans 0:65535 -- fail2ban's jail.conf DEFAULT, which
+  # neither caddy-badauth nor caddy-scan overrides, so "not naming a port" is
+  # already an all-ports ban. On this host that is worse than it sounds: dnsmasq
+  # below is one of the LAN's resolvers, so an all-ports ban on a household device
+  # costs it, not just this host. Leaving 53 reachable makes
+  # a wrong ban survivable -- the device loses o700 and nothing else.
+  #
+  # Nothing else here is load-bearing for a LAN client: the router serves DHCP
+  # (this host is a DHCP *client*, see systemd.network below), and there is no
+  # NTP or mDNS responder. ICMP is untouched either way, since multiport only
+  # matches tcp/udp destination ports -- a banned device still answers ping.
+  #
+  # Starts at 1 rather than 0 because port 0 is not a real destination.
+  banAllExceptDNS = {
+    # fail2ban renders this through `sed s/:/-/g` into an nftables anonymous
+    # set (action.d/nftables.conf, rule_match-multiport), so this becomes
+    # `dport { 1-52,54-65535 }`. The same code path already renders the 0:65535
+    # default every other jail here uses, so the range form is not new ground.
+    port = "1:52,54:65535";
+
+    # tcp,udp rather than fail2ban's `tcp` default. Caddy advertises HTTP/3 via
+    # Alt-Svc and UDP/443 is open (allowedUDPPorts below), so a TCP-only ban
+    # leaves a browser that already learned the advertisement talking to caddy
+    # over QUIC -- the ban would appear applied and change nothing. The action
+    # loops over this list, producing one nft rule per protocol against the
+    # same address set.
+    protocol = "tcp,udp";
+  };
 in
 {
   networking = {
@@ -446,6 +495,83 @@ in
           };
         };
 
+        # --- Marker-driven caddy jails ---------------------------------------
+        #
+        # Both key on the `ban_reason` field that log_append writes into the
+        # access line (vhostConfig and the wildcard vhost, above). That marker
+        # is the entire reason these can be strict where caddy-scan cannot: it
+        # says *why* caddy answered 404, which the status code alone does not,
+        # so neither jail can be tripped by an application's own 404.
+        #
+        # Both fail closed in the same sense as caddy-badauth: if log_append
+        # ever stops emitting, the regex stops matching and the jail bans
+        # nobody. Verified with fail2ban-regex against real caddy output before
+        # being trusted -- a genuine `jellyfin.${DOMAIN}` -> /favicon.ico 404 is
+        # missed by both.
+        #
+        # Both are additive rather than exclusive: a marked line still counts
+        # toward caddy-scan, and bantime-increment.overalljails shares the
+        # escalation ladder. A client persistent enough to reach caddy-scan's 40
+        # therefore also collects its all-ports ban, DNS included -- which is
+        # the intended split. banAllExceptDNS is mercy for the accident, not for
+        # someone working through a name list.
+
+        # Requests the exposure guard turned away: an address that is not
+        # permitted to reach a NONE or LAN vhost asking for one by name.
+        #
+        # maxretry = 1 is deliberate, and is only safe because nothing here
+        # produces such a request legitimately. Checked, and each of these has
+        # to stay true: no *-internal service sets dashboard.enable, so the
+        # homepage links to none of them; those UIs are reached over the ssh
+        # forward, which arrives as 127.0.0.1 and is permitted; and the two
+        # hosts that might plausibly ask for one by name -- this one, via
+        # dnsmasq's wildcard, and big-boss -- are both in ignoreIP above.
+        # findtime is irrelevant at maxretry = 1 and is stated only so the
+        # window is not inherited silently.
+        caddy-exposure = {
+          settings = {
+            journalmatch = "_SYSTEMD_UNIT=caddy.service";
+            maxretry = 1;
+            findtime = "10m";
+          }
+          // banAllExceptDNS;
+          filter.Definition = {
+            # Same remote_ip caveat as caddy-badauth above regarding the
+            # Cloudflare orange cloud.
+            failregex = ''^.*"remote_ip":"<HOST>".*"ban_reason":"exposure-guard".*$'';
+            ignoreregex = "";
+          };
+        };
+
+        # Names no service claims, answered by the wildcard vhost.
+        #
+        # NOT maxretry = 1, even though the marker is exactly as unambiguous as
+        # the one above, because the population that lands here is not the same.
+        # dnsmasq wildcards the whole zone (address=/${DOMAIN}/ below), so every
+        # typo of every name from every device on the network resolves to this
+        # host and arrives here. A browser navigation is at least two hits --
+        # the document plus /favicon.ico, which browsers request for error
+        # responses too -- so at 1 or 2 a single mistyped URL is a ban, and a
+        # renamed service turns every stale bookmark into one (mailpit-internal
+        # -> mail-internal, b8866ef, is recent enough for that to be live).
+        #
+        # Five costs nothing against the case this is actually for: anything
+        # walking a subdomain list produces hundreds, and this host is not
+        # reachable from the internet, so the realistic population here is
+        # household devices rather than background scanners.
+        caddy-unknown-host = {
+          settings = {
+            journalmatch = "_SYSTEMD_UNIT=caddy.service";
+            maxretry = 5;
+            findtime = "10m";
+          }
+          // banAllExceptDNS;
+          filter.Definition = {
+            failregex = ''^.*"remote_ip":"<HOST>".*"ban_reason":"unknown-host".*$'';
+            ignoreregex = "";
+          };
+        };
+
         # --- Per-application jails ------------------------------------------
         #
         # The two caddy jails above see status codes and nothing else, so they
@@ -605,9 +731,16 @@ in
           };
 
           "*.${DOMAIN}" = {
+            # Same log_append marker as the exposure guard, different reason:
+            # this is a name no service claims, which the caddy-unknown-host
+            # jail acts on. Nothing else in the JSON line distinguishes it from
+            # an application's own 404.
             extraConfig = ''
               ${securityHeaders}
-              respond 404
+              handle {
+                log_append ban_reason "unknown-host"
+                respond 404
+              }
             '';
 
             # Must be stated, not inherited. Left at the module default this
