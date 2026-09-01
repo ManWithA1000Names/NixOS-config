@@ -7,23 +7,28 @@
   ...
 }:
 let
-  # Cybrosys' "Dark Mode Backend Theme" (AGPL-3), pulled from the Odoo Apps
-  # store -- the archive is 13 MB and 150 of its 160 files are PNGs.
-  # The URL needs no apps.odoo.com login.
+  # OCA's web_dark_mode (AGPL-3, initOS GmbH). Replaced Cybrosys' theme, which
+  # layered 70 KB of hardcoded overrides on top of the compiled stylesheets and
+  # left every surface it missed light-on-light -- most visibly the whole
+  # navbar systray, which went dark-on-dark and unusable.
   #
-  # It is not an immutable URL: Cybrosys reuses the /18.0/ path for every point
-  # release, so a new upload changes the content under a fixed name. That fails
-  # as a fixed-output hash mismatch -- loudly, never silently -- and an
-  # already-realised store path keeps working regardless.
+  # This one substitutes primary/secondary_variables.scss and
+  # bootstrap_overridden.scss *before* Odoo's SCSS compiles, so stock styles
+  # recompile dark rather than being painted over. odoo18 already declares the
+  # web.assets_backend_lazy_dark and web.assets_web_dark bundles it hooks
+  # (web/__manifest__.py); Community merely ships no switch, which this adds to
+  # the user menu, per user.
   #
-  # stripRoot = false is load-bearing. addons_path entries are directories that
-  # *contain* addon directories, so $out has to be the parent holding
-  # dark_mode_backend/, not that directory's contents.
+  # Pinned to a commit, not the 18.0 branch head, so the hash is stable.
+  # postFetch strips the other ~50 addons of the OCA/web monorepo: they would
+  # otherwise all land on addons_path and clutter the Apps list.
   odooDarkMode = pkgs.fetchzip {
-    name = "odoo-addon-dark-mode-backend-18.0.1.0.0";
-    url = "https://apps.odoo.com/loempia/download/dark_mode_backend/18.0/dark_mode_backend.zip";
-    hash = "sha256-/z3el52w/DSHyBOyxFiFFsmh+NKGvfagJWU3/ERmy/8=";
-    stripRoot = false;
+    name = "odoo-addon-web-dark-mode-18.0.1.0.0";
+    url = "https://github.com/OCA/web/archive/0c027cd611fb070c2e3f18e8121384e6ff2245ba.tar.gz";
+    hash = "sha256-49hYo7Yz8Zzr85uhmp65EEwswMwPmrcProFtJMSJfqI=";
+    postFetch = ''
+      find "$out" -mindepth 1 -maxdepth 1 ! -name web_dark_mode -exec rm -rf {} +
+    '';
   };
 in
 {
