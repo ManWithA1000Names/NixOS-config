@@ -185,6 +185,24 @@ let
     # monitoring/netdata.nix, which stops the link from starting at all.
     (^|\.)netdata\.cloud$
 
+    # n8n. It ships pointed at four hosts in this zone: license.n8n.io (the
+    # license SDK), telemetry.n8n.io and ph.n8n.io (RudderStack and PostHog),
+    # and api.n8n.io (version checks, "what's new", in-app banners, the
+    # template gallery). One zone rule rather than four names, on the odoo.com
+    # precedent above and anchored the same way; nothing else on this host has
+    # any reason to reach n8n.io, so the host-wide scope costs nothing.
+    #
+    # Only the first of those is actually stopped here, and the distinction is
+    # the point rather than a caveat. The license call is server-side and
+    # leaves through this proxy on every n8n start. The other three are issued
+    # by the *browser*: the backend hands the editor those endpoints in
+    # /rest/settings and the editor's own REST client calls them, from a LAN
+    # client whose egress never passes through this host at all. Those are
+    # stopped by the N8N_* settings in services-LAN.nix, which keep the
+    # endpoints out of /rest/settings to begin with. This rule cannot reach
+    # them and must not be read as though it had.
+    (^|\.)n8n\.io$
+
     # Firebase Cloud Messaging, Google's push relay. Blocked without having
     # established which service uses it -- the candidates are Odoo's web push
     # (VAPID; Chrome's endpoint is FCM) and Vaultwarden. If push notifications

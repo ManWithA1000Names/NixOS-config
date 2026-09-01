@@ -35,6 +35,11 @@ let
       # All connection with it is done through local sockets.
       POSTGRESQL = 5432;
       SEERR = 5055;
+      # The editor/webhook front door only. n8n also runs a task broker on
+      # 5679, which the in-process Code-node runner connects back to; it binds
+      # 127.0.0.1 by its own default (N8N_RUNNERS_BROKER_LISTEN_ADDRESS) and
+      # nothing here refers to it by number.
+      N8N = 5678;
       RADARR = 7878;
       DASHBOARD = 8000;
       GITEA = 8001;
