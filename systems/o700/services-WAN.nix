@@ -6,6 +6,26 @@
   PATHS,
   ...
 }:
+let
+  # Cybrosys' "Dark Mode Backend Theme" (AGPL-3), pulled from the Odoo Apps
+  # store -- the archive is 13 MB and 150 of its 160 files are PNGs.
+  # The URL needs no apps.odoo.com login.
+  #
+  # It is not an immutable URL: Cybrosys reuses the /18.0/ path for every point
+  # release, so a new upload changes the content under a fixed name. That fails
+  # as a fixed-output hash mismatch -- loudly, never silently -- and an
+  # already-realised store path keeps working regardless.
+  #
+  # stripRoot = false is load-bearing. addons_path entries are directories that
+  # *contain* addon directories, so $out has to be the parent holding
+  # dark_mode_backend/, not that directory's contents.
+  odooDarkMode = pkgs.fetchzip {
+    name = "odoo-addon-dark-mode-backend-18.0.1.0.0";
+    url = "https://apps.odoo.com/loempia/download/dark_mode_backend/18.0/dark_mode_backend.zip";
+    hash = "sha256-/z3el52w/DSHyBOyxFiFFsmh+NKGvfagJWU3/ERmy/8=";
+    stripRoot = false;
+  };
+in
 {
   # Pulled in by `pkgs.opencloud.idp-web`, the login-page assets for the built-in
   # OIDC provider, which still builds with pnpm_9 (pkgs.opencloud.web moved to
@@ -81,6 +101,12 @@
       package = pkgs.odoo18;
       autoInit = true;
       autoInitExtraFlags = [ "--without-demo=all" ];
+
+      # Sets settings.options.addons_path only. Odoo still appends its own
+      # odoo/addons to odoo.addons.__path__ afterwards
+      # (odoo/modules/module.py, initialize_sys_path), so naming a path here
+      # does not cost us the built-in modules.
+      addons = [ odooDarkMode ];
 
       settings.options = {
         # Bind loopback only — Caddy is the sole external path in.
