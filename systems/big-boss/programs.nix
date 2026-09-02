@@ -19,6 +19,9 @@
 
     # themes
     volantes-cursors
+
+    # Firefox PWA's
+    firefoxpwa
   ];
 
   programs = {
@@ -29,5 +32,18 @@
     hyprlock.enable = true;
 
     gamemode.enable = true;
+
+    firefox = {
+      enable = true;
+
+      package = pkgs.firefox.override {
+        extraPrefs = ''
+          defaultPref("media.hardware-video-decoding-vulkan.enabled", true);
+          defaultPref("media.hardware-video-decoding-vulkan.direct-export.enabled", true);
+        '';
+      };
+
+      nativeMessagingHosts.packages = [ pkgs.firefoxpwa ];
+    };
   };
 }
