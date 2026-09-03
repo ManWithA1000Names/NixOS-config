@@ -94,6 +94,20 @@
         # Same job PAPERLESS_TRUSTED_PROXIES does above.
         N8N_PROXY_HOPS = 1;
 
+        # Otherwise n8n generates this on first start and saves it to
+        # $N8N_USER_FOLDER/.n8n/config, where no rebuild asserts it and no
+        # postgres-only backup captures it. Every stored credential is
+        # encrypted with it, so restoring the n8n database alone -- the one
+        # thing the centralized-postgres note below buys us -- would yield
+        # workflows whose credentials cannot be decrypted.
+        #
+        # This is not a change of key. It is the key n8n already generated,
+        # moved into the repo so it survives /var/lib being lost. n8n compares
+        # this value against the settings file on every start and refuses to
+        # boot on a mismatch (core, instance-settings.js), so a wrong value
+        # fails visibly rather than quietly orphaning the credential store.
+        N8N_ENCRYPTION_KEY_FILE = config.age.secrets.n8n-encryption-key.path;
+
         # State in the centralized postgres rather than n8n's default SQLite
         # under N8N_USER_FOLDER, for the reason given on the postgresql block
         # in services-internal.nix: one thing to back up rather than one per
