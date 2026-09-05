@@ -692,86 +692,100 @@ in
       '';
 
       virtualHosts =
-        (builtins.foldl' (
-          hosts:
-          { proxy, ... }:
-          assert !builtins.hasAttr proxy.domain hosts;
-          {
-            ${proxy.domain} = {
-              extraConfig = vhostConfig proxy;
+        let
+          generated = builtins.foldl' (
+            hosts:
+            { proxy, ... }:
+            assert !builtins.hasAttr proxy.domain hosts;
+            {
+              ${proxy.domain} = {
+                extraConfig = vhostConfig proxy;
 
-              # Every vhost, unconditionally: stderr -> journal, which is now
-              # where these stay rather than being a waypoint to a log store.
-              # There is no per-service switch because a request that was not
-              # recorded is indistinguishable from one that never happened,
-              # which is precisely the gap an attacker benefits from.
-              #
-              # This is also the single largest write source on the root disk --
-              # roughly 65 lines a minute, every one of them fsynced by journald
-              # and re-read by two fail2ban jails. If disk contention becomes a
-              # problem again, narrowing this (rather than dropping it) is the
-              # first thing to reach for.
-              #
-              # This string is spliced into a `log { }` block by the caddy
-              # module, and it replaces the module's default wholesale. The
-              # default is `output file <logDir>/access-<host>.log`, so naming
-              # only a format here would silently drop the output directive --
-              # hence stating `output stderr` explicitly even though it happens
-              # to be caddy's fallback.
+                # Every vhost, unconditionally: stderr -> journal, which is now
+                # where these stay rather than being a waypoint to a log store.
+                # There is no per-service switch because a request that was not
+                # recorded is indistinguishable from one that never happened,
+                # which is precisely the gap an attacker benefits from.
+                #
+                # This is also the single largest write source on the root disk --
+                # roughly 65 lines a minute, every one of them fsynced by journald
+                # and re-read by two fail2ban jails. If disk contention becomes a
+                # problem again, narrowing this (rather than dropping it) is the
+                # first thing to reach for.
+                #
+                # This string is spliced into a `log { }` block by the caddy
+                # module, and it replaces the module's default wholesale. The
+                # default is `output file <logDir>/access-<host>.log`, so naming
+                # only a format here would silently drop the output directive --
+                # hence stating `output stderr` explicitly even though it happens
+                # to be caddy's fallback.
+                logFormat = ''
+                  output stderr
+                  format json
+                '';
+              };
+            }
+            // hosts
+          ) { } (builtins.filter ({ proxy, ... }: proxy.enable) (builtins.attrValues config.seta));
+
+          # Exists purely so caddy manages a wildcard cert. Caddy skips
+          # per-name certs for any subject a managed wildcard covers, so every
+          # single-label service host above shares this one cert -- which is
+          # why seta.<svc>.proxy.domain should stay single-label.
+          #
+          # Odoo is the deliberate exception: it claims the bare ${DOMAIN}
+          # (services-WAN.nix explains why). A wildcard covers one label and
+          # does not match the bare parent, so caddy manages two certificates
+          # here: CN=${DOMAIN} with SAN `DNS:${DOMAIN}`, and CN=*.${DOMAIN}
+          # with SAN `DNS:*.${DOMAIN}` -- separate serials, disjoint SAN sets,
+          # renewed independently. Confirmed over the wire 2026-08-28; this
+          # comment previously claimed a single cert carrying both names, which
+          # is why the x509check jobs in monitoring/netdata.nix watch both.
+          #
+          # Exact hosts still win at routing time, so this only catches
+          # subdomains with no service.
+          handWritten = {
+            "*.${DOMAIN}" = {
+              # Same log_append marker as the exposure guard, different reason:
+              # this is a name no service claims, which the caddy-unknown-host
+              # jail acts on. Nothing else in the JSON line distinguishes it from
+              # an application's own 404.
+              extraConfig = ''
+                ${securityHeaders}
+                handle {
+                  log_append ban_reason "unknown-host"
+                  respond 404
+                }
+              '';
+
+              # Must be stated, not inherited. Left at the module default this
+              # vhost writes access-*.o700.net.log -- a literal asterisk in the
+              # filename. Requests landing here are by definition for names no
+              # service claims, which makes them more interesting than average,
+              # not less.
               logFormat = ''
                 output stderr
                 format json
               '';
             };
-          }
-          // hosts
-        ) { } (builtins.filter ({ proxy, ... }: proxy.enable) (builtins.attrValues config.seta)))
-        // {
-          # Exists purely so caddy manages a wildcard cert. Caddy skips
-          # per-name certs for any subject a managed wildcard covers, so every
-          # single-label service host above shares this one cert -- which is
-          # why seta.<svc>.proxy.domain must stay single-label.
-          #
-          # The apex does NOT share it. A wildcard covers one label and does
-          # not match the bare parent, so caddy manages two certificates here:
-          # CN=${DOMAIN} with SAN `DNS:${DOMAIN}`, and CN=*.${DOMAIN} with SAN
-          # `DNS:*.${DOMAIN}` -- separate serials, disjoint SAN sets, renewed
-          # independently. Confirmed over the wire 2026-08-28; this comment
-          # previously claimed a single cert carrying both names, which is why
-          # the x509check jobs in monitoring/netdata.nix watch both.
-          #
-          # Exact hosts still win at routing time, so this only catches
-          # subdomains with no service.
-          "${DOMAIN}" = {
-            extraConfig = ''
-              redir https://home.${DOMAIN}{uri} permanent
-            '';
           };
 
-          "*.${DOMAIN}" = {
-            # Same log_append marker as the exposure guard, different reason:
-            # this is a name no service claims, which the caddy-unknown-host
-            # jail acts on. Nothing else in the JSON line distinguishes it from
-            # an application's own 404.
-            extraConfig = ''
-              ${securityHeaders}
-              handle {
-                log_append ban_reason "unknown-host"
-                respond 404
-              }
-            '';
-
-            # Must be stated, not inherited. Left at the module default this
-            # vhost writes access-*.o700.net.log -- a literal asterisk in the
-            # filename. Requests landing here are by definition for names no
-            # service claims, which makes them more interesting than average,
-            # not less.
-            logFormat = ''
-              output stderr
-              format json
-            '';
-          };
-        };
+          # `//` gives the right-hand side priority, and the fold's own assert
+          # only guards collisions *within* the fold. So a name defined on both
+          # sides would silently take the hand-written definition and drop the
+          # seta one, with no eval error and nothing in the diff to show for it.
+          #
+          # Not hypothetical: this block used to define "${DOMAIN}" as a redirect
+          # to home.${DOMAIN}, and Odoo now claims that exact name through seta.
+          # Landing those two in the same tree would have served the redirect and
+          # silently discarded Odoo's vhost.
+          collisions = builtins.attrNames (builtins.intersectAttrs generated handWritten);
+        in
+        assert lib.assertMsg (collisions == [ ]) ''
+          caddy: hand-written vhost(s) ${lib.concatStringsSep ", " collisions} would
+          silently override the seta-generated definition of the same name.
+        '';
+        generated // handWritten;
     };
 
     dnsmasq = {

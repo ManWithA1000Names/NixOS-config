@@ -223,7 +223,40 @@ in
       proxy = {
         enable = true;
         port = PORTS.ODOO;
-        domain = "erp.${DOMAIN}";
+
+        # The bare apex, and the only service that does not follow the
+        # `<name>.${DOMAIN}` convention. Odoo serves the public website and the
+        # ERP backend from one process on one hostname *by design*, and nothing
+        # in it can be configured otherwise:
+        #
+        #   - `request.is_frontend` is read off the route decorator
+        #     (`routing.get('website', False)`, http_routing/models/ir_http.py),
+        #     never off the Host header. `/odoo` is not a website route, so the
+        #     website machinery -- including a website's Domain field -- is
+        #     structurally blind to it.
+        #   - There is no ALLOWED_HOSTS equivalent. The only host-aware gate
+        #     Odoo has is `dbfilter`, which selects a *database*; with one
+        #     database it selects nothing.
+        #   - Access to the backend is gated on the user instead: non-internal
+        #     users are bounced to /my (web/controllers/home.py), whatever
+        #     hostname they arrived on.
+        #
+        # Upstream's own on-prem deployment guide agrees by example -- its
+        # single nginx sample is one `server_name` carrying backend, website,
+        # portal and websocket together. Splitting them across two names was
+        # considered and rejected: it cannot be expressed in Odoo, so it would
+        # have to live in caddy, where it buys obscurity rather than access
+        # control and leaves generated links pointing at whichever name Odoo
+        # decided to stamp on them.
+        #
+        # Costs one certificate. The managed wildcard is `*.${DOMAIN}` and a
+        # wildcard does not match the bare parent, so caddy issues a second
+        # cert for this name -- see the comment on the `*.${DOMAIN}` vhost in
+        # networking.nix. That was already true before Odoo moved here (the
+        # apex carried a hand-written redirect vhost), so the CT-log exposure
+        # is unchanged.
+        domain = DOMAIN;
+
         exposure = "WAN";
       };
     };

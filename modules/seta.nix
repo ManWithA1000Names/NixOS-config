@@ -78,7 +78,7 @@
                     description = ''
                       The sub-domain that will be used in the proxy.
 
-                      Must stay a single label under ''${DOMAIN}: the managed
+                      Should stay a single label under ''${DOMAIN}: the managed
                       wildcard certificate is `*.''${DOMAIN}`, and a wildcard
                       matches exactly one label. A name like `a.b.''${DOMAIN}`
                       evaluates fine but makes caddy issue a separate
