@@ -45,6 +45,19 @@ in
       # the default pg_hba are dead weight once this is set.
       settings.listen_addresses = lib.mkForce "";
 
+      # PostgreSQL's own default is 100 and nothing here had overridden it.
+      # That was comfortable while every client held a handful of backends --
+      # 16 in use across odoo, gitea, n8n, mealie, paperless and netdata when
+      # this was measured -- but Odoo's connection pool is per *process*, and
+      # multi-process Odoo is seven of them (see db_maxconn in
+      # services-WAN.nix). Its worst case alone is 72.
+      #
+      # 200 is headroom, not a target: the point is that Odoo saturating its
+      # own pool must not be what makes gitea fail to open a connection. The
+      # cost is shared memory per slot -- tens of KB, allocated whether used
+      # or not -- and nothing at idle.
+      settings.max_connections = 200;
+
       # No `package` either. The default is keyed to system.stateVersion
       # ("26.05" -> postgresql_17), so it stays on 17 across channel bumps.
       # Pinning it by hand would only add a second place to forget. A major

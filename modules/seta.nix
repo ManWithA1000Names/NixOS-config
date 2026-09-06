@@ -72,6 +72,42 @@
                     description = "Internal service port.";
                   };
 
+                  # A second backend behind the same hostname, keyed by caddy
+                  # path matcher. Odoo is what this exists for -- in
+                  # multi-process mode its websocket endpoint lives on a
+                  # separate gevent port and the http workers 500 on it -- but
+                  # it is an attrset rather than an odoo-shaped flag because
+                  # "same hostname, one path prefix, a different port" is a
+                  # shape more than one application has, and because
+                  # `proxy.config` (the other way to express it) discards the
+                  # forwarded-header template along with everything else in
+                  # vhostConfig.
+                  #
+                  # That template is the reason this is not left to `config`:
+                  # overwriting X-Forwarded-For/X-Real-IP is an access-control
+                  # primitive, and a hand-written second upstream would be the
+                  # one place on this host where a client-supplied X-Real-IP
+                  # reaches a backend intact.
+                  #
+                  # Keys are caddy matcher tokens, one per entry, not bare
+                  # prefixes: `/websocket` matches only that path and
+                  # `/websocket/*` only what is under it, where a single
+                  # `/websocket*` would also swallow `/websocketfoo`.
+                  extraUpstreams = lib.mkOption {
+                    type = lib.types.attrsOf lib.types.port;
+                    default = { };
+                    example = {
+                      "/websocket" = 8072;
+                      "/websocket/*" = 8072;
+                    };
+                    description = ''
+                      Additional `<caddy path matcher> = port` routes on this
+                      vhost. Each becomes its own `handle` block ahead of the
+                      default upstream, and every one of them gets the same
+                      forwarded headers and exposure guard as `port` does.
+                    '';
+                  };
+
                   domain = lib.mkOption {
                     type = lib.types.str;
                     default = "${name}.${DOMAIN}";

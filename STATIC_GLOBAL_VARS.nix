@@ -52,6 +52,14 @@ let
       # (9100-9290 plus a few high ones, and NATS on 9233); they are internal,
       # bind loopback themselves, and nothing here refers to them by number.
       ODOO = 8069;
+      # Odoo's second listener. In multi-process mode the websocket endpoint
+      # is served by a separate gevent worker on its own port, and the regular
+      # http workers answer /websocket with a 500 -- so caddy has to know this
+      # number too (seta.odoo.proxy.extraUpstreams, services-WAN.nix). It is
+      # Odoo's own default for gevent_port; named here so the config and the
+      # proxy cannot drift apart. Loopback-bound like ODOO above, because
+      # GeventServer takes its interface from http_interface.
+      ODOO_GEVENT = 8072;
       OPENCLOUD = 9200;
       PROWLARR = 9696;
       VAULTWARDEN = 9999;

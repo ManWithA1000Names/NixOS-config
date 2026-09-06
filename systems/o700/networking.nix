@@ -94,15 +94,42 @@ let
 
       # No bare `reverse_proxy` form any more: forwardedHeaders makes headerLines
       # non-empty for every service that goes through this template.
+      upstream = port: ''
+        reverse_proxy localhost:${toString port} {
+          ${lib.concatStringsSep "\n      " headerLines}
+        }
+      '';
+
+      # Path-matched backends first, the service's own port last. Every branch
+      # is wrapped in `handle` so caddy takes exactly one of them: `handle` is
+      # mutually exclusive with its siblings, where a bare reverse_proxy left
+      # alongside them would also run for requests a matcher already claimed.
+      #
+      # Whitespace here is cosmetic -- the Caddyfile parser cares about
+      # newlines and braces, not indentation -- so no effort is made to line
+      # the nested blocks up.
+      extraHandlers = lib.mapAttrsToList (matcher: port: ''
+        handle ${matcher} {
+          ${upstream port}
+        }
+      '') proxy.extraUpstreams;
+
       handler =
         if proxy.config != "" then
           proxy.config
+        else if proxy.extraUpstreams == { } then
+          upstream proxy.port
         else
-          ''
-            reverse_proxy localhost:${toString proxy.port} {
-              ${lib.concatStringsSep "\n      " headerLines}
-            }
-          '';
+          lib.concatStringsSep "\n" (
+            extraHandlers
+            ++ [
+              ''
+                handle {
+                  ${upstream proxy.port}
+                }
+              ''
+            ]
+          );
 
       sources = vhostSources.${proxy.exposure};
 

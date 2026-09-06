@@ -155,17 +155,51 @@ in
         # in the database, which is not expressible here.
         publisher_warranty_url = "http://127.0.0.1:1/";
 
-        # Single-process mode for the evaluation period.
-        # NOTE: Odoo's Discuss (chat) real-time features are BROKEN in this
-        # mode. To fix them two things are needed:
-        #   1. Set workers > N (Odoo docs recommend 2*(CPU cores)+1 for HTTP
-        #      workers) — this switches Odoo to multi-process mode and starts
-        #      a gevent longpolling worker on port 8072.
-        #   2. Proxy /websocket to 127.0.0.1:8072 in Caddy. The seta system
-        #      has no template for a second upstream; the simplest approach is
-        #      a `handle /websocket*` block added to the Caddy vhost generation
-        #      in networking.nix, either as a seta option or hardcoded for odoo.
-        workers = 0;
+        # Four, not the 2*cores+1 = 17 from Odoo's sizing note: that assumes a
+        # dedicated machine and dozens of concurrent users. This one has eight
+        # cores shared with jellyfin, the arr stack and opencloud, 16 GB with
+        # no swap, and served 11k requests from a single client address across
+        # the entire evaluation. Four drains that 111-request burst in about a
+        # second. Raising it is this one line.
+        workers = 4;
+
+        # The websocket worker's port. Stated rather than left at its default
+        # because caddy now has to name the same number -- see
+        # seta.odoo.proxy.extraUpstreams below.
+        gevent_port = PORTS.ODOO_GEVENT;
+
+        # The connection pool is per *process*, and this change turns one
+        # process into seven: 4 http + 2 cron + 1 gevent. Left at the 64
+        # default that is a licence for 448 backends against a postgres whose
+        # max_connections was still the stock 100, shared with gitea, n8n,
+        # mealie, paperless and netdata (16 backends in use at the time of
+        # writing). The service that got the `too many clients` would not
+        # necessarily have been this one.
+        #
+        # 8 is generous for a worker that handles one request at a time; the
+        # gevent worker is the one that genuinely multiplexes -- every live
+        # browser tab is a connection it owns -- which is why Odoo gives it a
+        # separate knob. Worst case is now 4*8 + 2*8 + 24 = 72, and
+        # services-internal.nix raises max_connections to 200 so that number
+        # is not the whole budget.
+        db_maxconn = 8;
+        db_maxconn_gevent = 24;
+
+        # Raised from the 60s/120s defaults, which only take effect per worker
+        # in multi-process mode. The workload that approaches them is module
+        # installation: `ir.module.module/button_immediate_install` was
+        # measured at 19-24s of wall time during the evaluation and the
+        # process peaked at 1.2 GB of address space doing it. Installing a
+        # localization pack on top of Accounting is a larger job than any of
+        # those, and a worker SIGXCPU'd halfway through leaves a partially
+        # installed module -- a materially worse outcome than a slow request.
+        #
+        # Nothing in 30 days came close even to the old limit_time_real: the
+        # slowest request on record is 38s, and that was static files behind a
+        # module install. The cost of the higher ceilings is that a genuinely
+        # stuck request holds one of four workers for longer.
+        limit_time_cpu = 300;
+        limit_time_real = 600;
       };
     };
 
@@ -223,6 +257,29 @@ in
       proxy = {
         enable = true;
         port = PORTS.ODOO;
+
+        # Multi-process mode moves the websocket off the main port. Only
+        # GeventServer puts the raw connection into environ['socket'], so a
+        # /websocket handshake arriving at an http worker hits a KeyError that
+        # WebsocketConnectionHandler.open_connection re-raises as
+        # `RuntimeError: Couldn't bind the websocket. Is the connection opened
+        # on the evented port (8072)?` -- a 500 on every upgrade, with the
+        # browser's worker retrying forever. Loud, not silent, but total.
+        #
+        # This is the same split the nixpkgs odoo module makes when it
+        # generates its own nginx vhost (odoo + odoochat upstreams), which is
+        # bypassed here because services.odoo.domain is left null.
+        #
+        # Two matchers rather than one `/websocket*`, which would also swallow
+        # a hypothetical /websocketfoo. Everything under /websocket/ (health,
+        # peek_notifications, update_bus_presence, on_closed) is an ordinary
+        # http route either process can serve; sending it to the gevent worker
+        # matches upstream's `location /websocket` and keeps the bus endpoints
+        # together.
+        extraUpstreams = {
+          "/websocket" = PORTS.ODOO_GEVENT;
+          "/websocket/*" = PORTS.ODOO_GEVENT;
+        };
 
         # The bare apex, and the only service that does not follow the
         # `<name>.${DOMAIN}` convention. Odoo serves the public website and the
