@@ -129,7 +129,7 @@
     # infrastructure.
     services =
       let
-        infraRequiresExSSD = [];
+        infraRequiresExSSD = [ ];
 
         setaRequiresExSSD = lib.concatMap (meta: meta.units) (
           builtins.filter (meta: meta.requiresExSSD) (builtins.attrValues config.seta)

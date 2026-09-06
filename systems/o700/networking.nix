@@ -641,7 +641,7 @@ in
             action = "%(banaction_allports)s[name=gitea]";
           };
           filter.Definition = {
-            failregex = ''.*(Failed authentication attempt|invalid credentials|Attempted access of unknown user).* from <HOST>'';
+            failregex = ".*(Failed authentication attempt|invalid credentials|Attempted access of unknown user).* from <HOST>";
             ignoreregex = "";
           };
         };

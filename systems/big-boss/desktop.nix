@@ -1,9 +1,4 @@
-{
-  pkgs,
-  USERNAME,
-  ...
-}:
-{
+{ pkgs, USERNAME, ... }: {
   services = {
 
     hypridle.enable = true;
@@ -58,6 +53,7 @@
       noto-fonts
       noto-fonts-cjk-sans
       noto-fonts-color-emoji
+      google-fonts
       font-awesome
       source-han-sans
       nerd-fonts.fira-code
