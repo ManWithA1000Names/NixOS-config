@@ -962,9 +962,105 @@ in
         # log store (capped at 10G in monitoring.nix) and fail2ban reads it, so
         # a per-request stream crowds out bans rather than just history.
         #
-        # Nothing rotates this yet. Watch its growth before trusting it
-        # unattended; it is one line per outbound request, host-wide.
+        # Rotated by the logrotate block below; it is one line per outbound
+        # request, host-wide, so it grows with traffic and never levels off.
         LogFile = "/var/log/tinyproxy/tinyproxy.log";
+      };
+    };
+
+    # Rotation for the file logs on this host. Nothing here asks for logrotate:
+    # nixpkgs' systemd module registers wtmp/btmp blocks unconditionally and
+    # services.logrotate.enable defaults to "on if any block exists", which is
+    # why it is already running. Its timer is hourly, so every maxsize below is
+    # really an hourly check while the schedule stays daily.
+    #
+    # Deliberately not here: /var/log/journal, which journald bounds itself
+    # against the 10G cap in monitoring.nix and which logrotate would corrupt;
+    # /var/log/lastlog, a sparse UID-indexed database rather than an append
+    # stream; and /var/log/caddy, where every file is an orphan -- each vhost
+    # has set `output stderr` since 3576421, and the apex was the last holdout
+    # until 05ac134 moved it onto a seta vhost. Rotation cannot shrink files
+    # nothing appends to.
+    logrotate.settings = {
+      "/var/log/tinyproxy/tinyproxy.log" = {
+        # Daily, keeping two weeks. This log exists to answer "what did this
+        # host talk to", and the egress filter above is meant to be extended
+        # from its evidence, so the retention worth having is however far back
+        # an investigation reaches -- not the smallest number that bounds the
+        # disk. Measured at ~2.4M/day, so two weeks is tens of megabytes.
+        frequency = "daily";
+        rotate = 14;
+
+        # Runaway guard, not the normal path: rotate early if a day's traffic
+        # gets there first. maxsize (unlike size) keeps the daily schedule as
+        # the floor rather than replacing it.
+        maxsize = "64M";
+
+        # Short text lines; gzip takes these to a small fraction, which is what
+        # makes 14 generations cheap. delaycompress is deliberately absent --
+        # it exists for daemons that keep appending to the rotated file, and
+        # with copytruncate the copy is final the moment it is made.
+        compress = true;
+
+        # The directive that makes this work at all. tinyproxy 1.11 opens its
+        # log once in setup_logging() and never reopens it: SIGHUP is a
+        # connection garbage collect, SIGUSR1 reloads config and filters but
+        # not the log fd, and the upstream module's ExecReload sends SIGHUP.
+        # So the usual rename-then-signal rotation would leave the daemon
+        # writing to an unlinked inode -- the visible log frozen at rotation
+        # time and the space never reclaimed. copytruncate copies the file and
+        # truncates the original in place, leaving the fd valid. Safe here
+        # because tinyproxy opens an existing log with O_APPEND, so writes
+        # resume at 0 rather than leaving a sparse hole; and no connection is
+        # dropped, which restarting the host's egress choke point would do to
+        # every service at once.
+        copytruncate = true;
+      };
+
+      # The largest live log on the host by an order of magnitude -- measured
+      # at ~12.5M/day, which is what "thousands of entries per hour" above
+      # buys. Same retention as the proxy log, for the same reason: the two
+      # are read together when answering what this host resolved and then
+      # talked to.
+      "/var/log/dnsmasq/queries.log" = {
+        frequency = "daily";
+        rotate = 14;
+        maxsize = "128M";
+        compress = true;
+
+        # Unlike tinyproxy, dnsmasq can reopen its log -- but only on SIGUSR2.
+        # SIGHUP re-reads config and clears the cache while leaving the fd
+        # alone, so the module's own ExecReload (kill -HUP) is the wrong
+        # signal and `systemctl reload` here would rotate into a dead inode
+        # exactly as silently. dnsmasq(8) also requires USR2 arrive *after*
+        # the rename, which is what postrotate guarantees.
+        #
+        # systemctl resolves because systemd is on every NixOS unit's PATH,
+        # and the logrotate unit's PrivateNetwork does not block it -- it
+        # talks over AF_UNIX, which that unit explicitly permits.
+        postrotate = "systemctl kill --signal=SIGUSR2 --kill-whom=main dnsmasq.service";
+
+        # dnsmasq keeps writing to the renamed file until the signal lands, so
+        # the previous generation is only safe to compress a cycle later.
+        delaycompress = true;
+      };
+
+      # netdata ships a logrotate fragment upstream; the nixpkgs module does
+      # not install it, so this log has never been bounded. A week is enough:
+      # unlike the two above it records hits on netdata's own dashboard, which
+      # is a debugging aid rather than evidence about the host's behaviour.
+      "/var/log/netdata/access.log" = {
+        frequency = "daily";
+        rotate = 7;
+        maxsize = "64M";
+        compress = true;
+        delaycompress = true;
+
+        # SIGHUP is netdata's documented reopen signal. The module's own
+        # ExecReload sends HUP plus USR1 and USR2, which additionally saves the
+        # database and reloads health -- work rotation has no reason to
+        # trigger, hence signalling HUP alone.
+        postrotate = "systemctl kill --signal=SIGHUP --kill-whom=main netdata.service";
       };
     };
   };
