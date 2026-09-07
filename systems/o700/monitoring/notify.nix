@@ -60,7 +60,13 @@ let
                   "$unit" "$body")
       fi
 
-      curl -sS --max-time 20 --retry 3 --retry-delay 5 \
+      # --retry alone never covered the failure this was added for: curl treats
+      # ECONNREFUSED as fatal rather than transient (curl.1, --retry-connrefused),
+      # so a closed port fell straight through the existing --retry 3.
+      # --max-time bounds each attempt; --retry-max-time bounds the total, and
+      # stays under systemd's 90s DefaultTimeoutStartSec.
+      curl -sS --max-time 20 --retry 5 --retry-delay 5 \
+        --retry-connrefused --retry-max-time 60 \
         "https://api.telegram.org/bot''${TELEGRAM_BOT_TOKEN}/sendMessage" \
         --data-urlencode "chat_id=''${TELEGRAM_CHAT_ID}" \
         -d "parse_mode=HTML" \
@@ -112,6 +118,23 @@ let
   );
 
   criticalUnits = lib.unique (infraCriticalUnits ++ setaCriticalUnits);
+
+  # The alerting path egresses directly rather than through tinyproxy.
+  # systemd.globalEnvironment (networking.nix) points every unit at the proxy,
+  # which makes Telegram delivery depend on the one service whose failure this
+  # exists to report -- and on it *listening*, which is not what systemd calling
+  # it active means: the upstream unit is Type=simple, so it goes active at exec,
+  # before it binds 127.0.0.1:TINYPROXY. That is the race that left
+  # telegram-boot-notice failed with curl exit 7 after the 26.05 bump.
+  #
+  # Same reasoning the proxy block already applies to dnscrypt-proxy: something
+  # the recovery path needs must not be routed through something that can be the
+  # thing that broke. The filter is a blocklist and api.telegram.org was never on
+  # it, so the proxy gave this traffic visibility, not policy.
+  notifyEnvironment = {
+    no_proxy = "*";
+    NO_PROXY = "*";
+  };
 in
 {
   systemd.services =
@@ -125,6 +148,7 @@ in
       # This unit must not trigger itself (would loop); OnFailure is cleared on it.
       "telegram-notify@" = {
         description = "Telegram failure notification for %i";
+        environment = notifyEnvironment;
         serviceConfig = {
           Type = "oneshot";
           EnvironmentFile = config.age.secrets.alerting.path;
@@ -141,6 +165,7 @@ in
       telegram-boot-notice = {
         description = "Send Telegram notification on boot";
         wantedBy = [ "multi-user.target" ];
+        environment = notifyEnvironment;
         after = [
           # network-online.target only means an interface has an address. It
           # says nothing about a resolver answering, which is what curl needs.
