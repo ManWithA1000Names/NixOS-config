@@ -282,6 +282,139 @@
               };
             };
 
+            backup = lib.mkOption {
+              default = { };
+
+              description = ''
+                How this service's state is captured, and how it is put back.
+
+                The set that this generates is deliberately explicit rather than
+                derived from the service's own module options. `dataDir` and
+                friends are not a reliable source: three services here run
+                DynamicUser=true, where the option says /var/lib/<svc> but the
+                bytes are at /var/lib/private/<svc> and the former is a symlink
+                restic will not follow. A path stated here is a path that was
+                checked.
+
+                The database half needs no option of its own -- `postgres`
+                above is already the manifest, and `backup.enable && postgres`
+                is what puts <svc>'s database in <svc>'s snapshot.
+              '';
+
+              type = lib.types.submodule {
+                options = {
+                  enable = lib.mkOption {
+                    type = lib.types.bool;
+                    default = false;
+                    description = ''
+                      Give this service a tagged snapshot in the restic
+                      repository.
+
+                      Defaults to false, which is the opposite direction from
+                      networkConfinement and chosen for the same kind of reason.
+                      A service that is silently confined fails visibly; a
+                      service that is silently *backed up* would archive
+                      whatever paths a default guessed at, and "we have a
+                      backup" that turns out to hold the wrong directory is
+                      worse than a known gap. Opting in is one line and forces
+                      somebody to name the paths.
+                    '';
+                  };
+
+                  paths = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [ ];
+                    example = [ "/var/lib/private/odoo/data" ];
+                    description = ''
+                      Live directories to archive, in addition to the staging
+                      directory the prepare step writes dumps into.
+
+                      For a DynamicUser service this must be the real
+                      /var/lib/private/<svc> path. restic archives a symlink as
+                      a symlink, so naming /var/lib/<svc> produces a snapshot
+                      that succeeds, reports a plausible file count, and
+                      contains no data at all.
+                    '';
+                  };
+
+                  exclude = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [ ];
+                    example = [ "/var/lib/paperless/index" ];
+                    description = ''
+                      restic exclude patterns, for state that is regenerable or
+                      too churny to be worth deduplicating -- search indexes,
+                      thumbnail and icon caches, logs, an application's own
+                      internal backup directory.
+
+                      Keep this list conservative. Everything excluded is
+                      something a restore has to rebuild, and the cost of
+                      keeping a few hundred MB of thumbnails is far below the
+                      cost of discovering at restore time that something
+                      load-bearing matched a pattern.
+                    '';
+                  };
+
+                  sqlite = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [ ];
+                    example = [ "/var/lib/kavita/config/kavita.db" ];
+                    description = ''
+                      SQLite databases to capture with `sqlite3 .backup` into
+                      the staging directory.
+
+                      Copying the file directly is not equivalent and not safe:
+                      with WAL enabled the committed state is split between the
+                      .db and its -wal sibling, so a plain copy of a live
+                      database is a torn read. `.backup` takes a proper
+                      snapshot through the SQLite API while the service keeps
+                      running.
+
+                      Every file listed here should also be excluded from
+                      `paths` (including its -wal/-shm siblings), so the
+                      snapshot carries the consistent copy and not the live one
+                      as well.
+                    '';
+                  };
+
+                  stopUnits = lib.mkOption {
+                    type = lib.types.bool;
+                    default = false;
+                    description = ''
+                      Stop every unit in `units` for the duration of the backup,
+                      then start them again.
+
+                      For services whose on-disk state cannot be copied
+                      consistently while they run and that offer no equivalent
+                      of pg_dump or sqlite .backup -- opencloud's embedded
+                      bbolt/jsoncs3 metadata stores are the case this exists
+                      for. Both filesystems on this host are ext4, so there is
+                      no snapshot to take instead.
+
+                      The restart is wired through the restic module's
+                      backupCleanupCommand, which systemd runs in postStop, so
+                      the service comes back even when the backup fails.
+                    '';
+                  };
+
+                  keepYearly = lib.mkOption {
+                    type = lib.types.ints.unsigned;
+                    default = 3;
+                    description = ''
+                      Yearly snapshots to keep for this service's tag.
+
+                      Per-service rather than global because retention here is
+                      partly a legal question rather than a storage one: the
+                      services holding accounting and association records are
+                      subject to Greek statutory retention and need a much
+                      longer floor than a recipe manager does. Everything else
+                      in the forget policy is shared.
+                    '';
+                  };
+                };
+              };
+            };
+
             critical = lib.mkOption {
               default = false;
 
