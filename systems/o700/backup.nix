@@ -723,6 +723,24 @@ let
         restic_cmd restore "$snap" --target "$scratch" --include "$stagingdir" > /dev/null
         payload="$scratch$stagingdir"
 
+        # pg_restore and psql run as `postgres` via runuser, and neither can
+        # reach this payload as extracted. Two separate barriers: mktemp -d
+        # creates the scratch root 0700, and restic recreates the staging
+        # directories inside it carrying the 0700 root mode recorded in the
+        # snapshot (the tmpfiles rule below). Either one alone is enough to
+        # produce "could not open input file: Permission denied" on a file that
+        # is plainly there.
+        #
+        # chown rather than chmod because the payload holds plaintext dumps --
+        # Vaultwarden's database among them -- and /var/tmp is world-traversable.
+        # Handing the tree to the one account that has to read it keeps it away
+        # from every other account; root is unaffected by ownership, so the
+        # manifest and sqlite steps below still work unchanged.
+        #
+        # The dry-run path skips the database block entirely, so this is not
+        # something --dry-run can ever surface. It was found by a real restore.
+        chown -R postgres:postgres "$scratch"
+
         local snapver="" snaprev="unknown" snappg="" snaptime
         if [ -f "$payload/manifest" ]; then
           snapver=$(sed -n 's/^version=//p'                "$payload/manifest")
