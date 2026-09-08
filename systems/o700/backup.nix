@@ -783,7 +783,12 @@ let
         fi
 
         local -a restoreflags=(--target / --delete)
-        [ "$dryrun" = 1 ] && restoreflags+=(--dry-run --verbose)
+        # --verbose=2, not --verbose. At level 1 restic prints only the summary
+        # line -- "deleted 3 files/dirs" -- which is a count with no names, and
+        # naming them is the entire reason to run this before a real restore.
+        # restic's own help for --delete says so: "Use '--dry-run -vv' to check
+        # what would be deleted".
+        [ "$dryrun" = 1 ] && restoreflags+=(--dry-run --verbose=2)
 
         for pth in "''${paths[@]}"; do
           echo "restoring $pth"
@@ -854,9 +859,17 @@ let
       }
 
       cmd=''${1:-}
-      # Not `[ $# -gt 0 ] && shift`: as a top-level AND-list that evaluates to
-      # false when no arguments were given, set -e would abort the script
-      # before it could print the usage text.
+      # Written as an `if` rather than `[ $# -gt 0 ] && shift`. Not because the
+      # AND-list would trip set -e -- it would not, and an earlier version of
+      # this comment claimed otherwise. Bash exempts a failing command in a &&
+      # list unless it is the one following the final &&, so the test may fail
+      # freely here.
+      #
+      # The reason is that the exemption stops applying when such a list is the
+      # LAST command in a function or script: there its non-zero status becomes
+      # the return value, which under set -e aborts the caller or silently
+      # turns a successful run into a non-zero exit. The `if` form has no such
+      # edge, so it is the shape used throughout this script.
       if [ $# -gt 0 ]; then shift; fi
       case "$cmd" in
         list|snapshots|restore|verify) ;;
