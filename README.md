@@ -13,8 +13,13 @@ Project structure breadown:
 - `secrets`: Contains all the encrypted secrets.
 - `config`: Contains configuration files for various programs.
 - `justfile`: Contains helpful commands for deploying configuration files, building new/deleting generations.
+- `modules`: Cross-cutting nixos modules that declare their own options, rather than configuring a single system.
 - `systems/big-boss`: Contains nixos modules used in the `big-boss` system.
 - `systems/o700`: Contains nixos modules used in the `o700` system.
 - `systems/common`: Modules used in both systems.
+- `docs`: Operator handbooks for the subsystems that need one.
 
-More specific details about how everything runs/is setup can be found in the (docs)[./docs] directory.
+More specific details about how everything runs/is setup can be found in the [docs](./docs) directory:
+
+- [Backup and restore](./docs/backup-and-restore.md): what is backed up, how to
+  restore a service to a snapshot, and how to rebuild the host from nothing.

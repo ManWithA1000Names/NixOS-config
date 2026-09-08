@@ -13,10 +13,20 @@ let
 
   # Backup sets that are not seta services.
   #
-  # Same escape hatch as infraRequiresExSSD (hardware-configuration.nix) and
-  # infraCriticalUnits (monitoring/notify.nix), and for the same reason: seta is
-  # keyed by *service*, and neither of these is one. `postgres` is the database
-  # cluster itself; `kavita-library` is a pile of files no daemon owns.
+  # The third of three sibling escape hatches, all in this directory and all
+  # existing for the same reason: seta is keyed by *service*, and some things
+  # that need its behaviour are not one. The other two are infraRequiresExSSD
+  # (hardware-configuration.nix) and infraCriticalUnits (monitoring/notify.nix).
+  #
+  # Here, `postgres` is the database cluster itself and `kavita-library` is a
+  # pile of files no daemon owns.
+  #
+  # This file is a seta *consumer*, like networking.nix and notify.nix, which is
+  # why it lives beside them rather than in modules/. Nothing in it declares an
+  # option -- seta.<svc>.backup is declared in modules/seta.nix, and everything
+  # below merely reads that manifest and generates config from it. It is also
+  # not host-agnostic and could not be: it reads config.seta, which exists only
+  # on this host.
   infraBackupSets = {
     # The whole-cluster safety net, and the only set that captures roles,
     # grants and any database whose service has no seta entry. Every
@@ -177,6 +187,29 @@ let
   # | Prepare / cleanup                                                |
   # +-----------------------------------------------------------------+
 
+  # This runs as the restic unit's ExecStartPre, which puts the database dump
+  # *before* the file scan in ExecStart. That ordering is load-bearing and is
+  # the reverse of what looks safe, so do not "fix" it.
+  #
+  # Every application here writes the blob before committing the row that
+  # references it -- it must, or the row would be visible while its data was
+  # not. A backup therefore has to capture them the other way round: dump the
+  # database, then scan the files. A blob written mid-run is then an orphan
+  # nothing points at, which is harmless. Scanning files first and dumping
+  # afterwards produces the opposite and much worse artefact -- a row committed
+  # after the scan passed, referencing a file that was never captured.
+  #
+  # Stated so it can be checked: if B references A and the application writes A
+  # then B, capturing B at t_B and A at t_A is safe only when t_B <= t_A. B is
+  # the database.
+  #
+  # The case this does NOT cover is deletion, which is the mirror image: a row
+  # deleted after the dump leaves the dump referencing a file the scan no longer
+  # finds. The two orders are symmetric and this is a bet that creations
+  # outnumber deletions, which they do by a wide margin at 02:00. The way to
+  # remove the window rather than trade it is stopUnits, which is what
+  # opencloud does.
+  #
   # Everything runs as root (the restic units' default user), which is required
   # rather than convenient: /var/lib/private is 0700 root:root, so the three
   # DynamicUser services' state is unreadable to anyone else.
@@ -717,10 +750,27 @@ let
           [ "$answer" = "$set" ] || { echo "aborted."; exit 1; }
         fi
 
-        # Ownership is read off the live filesystem *before* anything moves.
-        # This is what carries the three DynamicUser services: their uid is
-        # assigned per boot and the one recorded in the snapshot is stale, so
-        # the only correct target is whatever the directory owns right now.
+        # Ownership is read off the live filesystem *before* anything moves,
+        # and re-applied at the end.
+        #
+        # The reason is bare-metal recovery, not DynamicUser. System uids are
+        # allocated in whatever order the modules happen to be evaluated, so a
+        # rebuilt host can give `gitea` or `paperless` a different uid than the
+        # one recorded in the snapshot. restic restores the *recorded* uid
+        # faithfully, which on a rebuilt host means a service that cannot read
+        # its own state directory. Reading the current owner first and chowning
+        # back to it is what makes a restore survive that.
+        #
+        # It is a no-op for the three DynamicUser services, and the reason is
+        # worth knowing because it is not the obvious one: with id-mapped
+        # mounts -- which this kernel supports -- systemd leaves
+        # /var/lib/private/<svc> owned by `nobody` (65534) in the *host*
+        # namespace permanently, and maps it to the dynamic uid only inside the
+        # service's own namespace (systemd.exec(5), DynamicUser=). So the uid
+        # restic sees is 65534 every night regardless of what systemd allocated
+        # this boot, it is stable across reboots, and the snapshot is never
+        # stale. Nothing here has to compensate for a rotating uid, because
+        # from the host's point of view there isn't one.
         local -a owners=()
         local pth
         for pth in "''${paths[@]}"; do
@@ -874,7 +924,7 @@ in
     assertion = meta.package != null;
     message = ''
       seta.${set}.backup.enable is set, but config.services.${set}.package does not resolve.
-      modules/backup.nix looks the package up by service name to stamp a version into every
+      systems/o700/backup.nix looks the package up by service name to stamp a version into every
       snapshot, and that version is what stops a restore from loading old data under a newer
       binary. Without it the version guard in o700-restore silently has nothing to compare.
     '';
@@ -889,7 +939,30 @@ in
     initialize = true;
 
     paths = [ (staging set) ] ++ meta.paths;
-    inherit (meta) exclude;
+    # Excludes are the operator's list plus the live SQLite files, derived
+    # rather than restated. Anything captured by `sqlite` has already been
+    # snapshotted into staging through the SQLite API; archiving the live file
+    # as well stores a second, torn copy of the same database and re-uploads
+    # most of it every night, since a WAL-mode database rewrites pages
+    # scattered throughout the file.
+    #
+    # This used to be a sentence in the `sqlite` option telling whoever added a
+    # service to also write the exclude by hand. Forgetting it cost repository
+    # churn silently -- the backup still succeeded and the restore was still
+    # correct, because o700-restore installs the staged copy after the file
+    # restore, so nothing ever pointed at the mistake.
+    #
+    # The three sidecars are named explicitly rather than globbed with
+    # "${db}*": -wal and -shm exist in WAL mode, -journal in rollback mode, and
+    # a glob would also swallow anything else that happens to share the prefix.
+    exclude =
+      meta.exclude
+      ++ lib.concatMap (db: [
+        db
+        "${db}-wal"
+        "${db}-shm"
+        "${db}-journal"
+      ]) meta.sqlite;
 
     # No timer. Every entry is started by o700-backup.service instead, in a
     # fixed order, one at a time -- see the orchestrator below for why serial
@@ -1018,11 +1091,25 @@ in
   };
 
   systemd.tmpfiles.rules = [
-    # 0700 root: the staging directory holds plaintext database dumps, and the
-    # repository holds every secret on this host in restic's own encrypted
-    # form. Neither has any reason to be readable by the media group that owns
-    # the rest of the drive.
-    "d ${PATHS.BACKUP_ROOT}     0700 root root - -"
+    # 0755 and NOT 0700, which is the tempting value and is wrong.
+    #
+    # This directory is a parent, not a container of secrets. The vaultwarden
+    # module puts its own nightly dump at ${PATHS.BACKUP_ROOT}/warden owned by
+    # vaultwarden:vaultwarden, and backup-vaultwarden.service runs as that user
+    # -- so it needs the traverse bit here to reach its own directory at all.
+    # At 0700 root:root that unit fails with EACCES, which would break the only
+    # backup this host had before any of this existed.
+    #
+    # Nothing is exposed by that. What is sensitive lives one level down and is
+    # 0700 in its own right, and the names of three subdirectories are not a
+    # secret worth breaking a service for.
+    "d ${PATHS.BACKUP_ROOT}     0755 root root - -"
+
+    # These two are the ones that matter. The repository holds every secret on
+    # this host in restic's encrypted form, and the staging directory holds
+    # plaintext database dumps for the minutes between the dump and the
+    # archive. Neither has any reason to be readable by the media group that
+    # owns the rest of the drive.
     "d ${PATHS.RESTIC_REPO}     0700 root root - -"
     "d ${PATHS.BACKUP_STAGING}  0700 root root - -"
   ];

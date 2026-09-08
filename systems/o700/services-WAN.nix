@@ -351,6 +351,43 @@ in
       # belt-and-suspenders; the duplicated CREATE-if-not-exists is harmless.
       postgres = true;
 
+      backup = {
+        enable = true;
+
+        # /var/lib/private, not /var/lib. The unit is DynamicUser=true with
+        # StateDirectory=odoo, so /var/lib/odoo is a symlink into the private
+        # tree -- and restic archives a symlink as a symlink. Naming the
+        # symlink produces a snapshot that succeeds, reports a plausible file
+        # count and contains no filestore at all.
+        #
+        # `data` rather than the whole state directory: this is the filestore,
+        # where every ir.attachment binary lives under filestore/odoo/. It is
+        # content-addressed by sha1, so the files are immutable and restic sees
+        # only genuinely new attachments each night.
+        paths = [ "/var/lib/private/odoo/data" ];
+
+        # Session cookies. Regenerated on demand, worthless a day later, and
+        # they churn constantly -- the worst possible combination for dedup.
+        exclude = [ "/var/lib/private/odoo/data/sessions" ];
+
+        # Nothing else in that directory is excluded, and both survivors were
+        # checked against the real host rather than inferred:
+        #
+        #   addons/               modules installed through the UI rather than
+        #                         declared in `addons` above. Not reproducible
+        #                         from this config, so not disposable.
+        #   .odoo.initialized     zero bytes and load-bearing. autoInit's
+        #                         pre-start runs `odoo --init=INIT --database=odoo`
+        #                         whenever this file is absent (odoo.nix:191-196),
+        #                         so a restore that dropped it would fire an
+        #                         init pass at an already-populated database.
+
+        # Accounting and myDATA-relevant records. Greek statutory retention
+        # governs how long these have to survive, and it is measured in years,
+        # not in the twelve months the shared monthly policy provides.
+        keepYearly = 10;
+      };
+
       dashboard = {
         enable = true;
         name = "Odoo";
@@ -429,6 +466,63 @@ in
 
       critical = true;
 
+      # backup-vaultwarden is the module's own nightly sqlite dump. It was
+      # never named here, so it had been running with none of the three things
+      # this list drives: no RequiresMountsFor, so it wrote to the bare
+      # mount-point and filled the root disk whenever the SSD was absent; no
+      # OnFailure, so a broken backup was silent; and no IPAddressDeny.
+      # modules/seta.nix:161 and monitoring/notify.nix:114 both already claimed
+      # it reached those consumers through this option.
+      #
+      # It is exactly the failure the assertion at the bottom of seta.nix
+      # exists to catch, and the one case that assertion cannot see: it checks
+      # that every *named* unit exists, not that every unit a service owns was
+      # named.
+      units = [
+        "vaultwarden"
+        "backup-vaultwarden"
+      ];
+
+      backup = {
+        enable = true;
+
+        # The live state directory, not ${PATHS.BACKUP_ROOT}/warden. Reading
+        # the module's own backup copy would make restic's input depend on
+        # another job having succeeded first, and would leave the restore path
+        # writing to a directory nothing reads. Capturing the source directly
+        # keeps this service shaped like every other one -- and leaves
+        # backup-vaultwarden as a genuinely independent second mechanism
+        # rather than a link in this chain.
+        paths = [ "/var/lib/vaultwarden" ];
+
+        sqlite = [ "/var/lib/vaultwarden/db.sqlite3" ];
+
+        exclude = [
+          # Favicons fetched from the sites users store logins for. Purely a
+          # cache, and one that churns.
+          "/var/lib/vaultwarden/icon_cache"
+          "/var/lib/vaultwarden/tmp"
+        ];
+
+        # db.sqlite3 and its -wal/-shm/-journal siblings are excluded
+        # automatically because they are named in `sqlite` above -- see the
+        # exclude derivation in backup.nix.
+
+        # attachments/ is irreplaceable and is the reason the whole directory
+        # is archived rather than an enumerated list. sends/ does not exist yet
+        # -- vaultwarden creates it the first time somebody uses Send -- and
+        # archiving the directory rather than its current contents is exactly
+        # what means nobody has to remember to add it then.
+        #
+        # rsa_key.pem is a different and much milder case, worth stating so it
+        # is not mistaken for the first kind: it signs the JWT access tokens
+        # clients hold, nothing more. The vault itself is encrypted client-side
+        # under each user's master password and this key is not involved, so
+        # losing it costs one re-login per device and destroys nothing. It is
+        # backed up because a recovery nobody notices beats one that logs
+        # everybody out, not because the data depends on it.
+      };
+
       dashboard = {
         enable = true;
         name = "Vaultwarden";
@@ -455,6 +549,85 @@ in
 
       postgres = true;
 
+      backup = {
+        enable = true;
+
+        # The whole state directory in one path, because almost all of it is
+        # irreplaceable and enumerating the good parts is how you miss one.
+        # It holds repositories/ (the git objects), data/lfs, data/attachments,
+        # data/avatars, data/packages -- and custom/conf, which is the part
+        # that is easy to forget.
+        #
+        # custom/conf/secret_key is the one that matters, and it is not a
+        # session key. Gitea uses it to encrypt columns *in the database*: TOTP
+        # secrets, OAuth2 application client secrets, Actions secrets. Restore
+        # the database without it and that ciphertext is undecryptable -- every
+        # 2FA-enrolled user is locked out rather than merely logged out, and the
+        # only way back in is an admin disabling 2FA per user from the CLI.
+        # (Which columns exactly varies by Gitea version; confirm against the
+        # running one before relying on the list.)
+        #
+        # The other three in that directory are far milder and are here for
+        # completeness rather than urgency: oauth2_jwt_secret costs third-party
+        # integrations a re-authorisation, lfs_jwt_secret signs tokens that live
+        # for minutes, and internal_token authenticates the git hook binary
+        # calling back into the server -- a mismatch breaks pushes until it is
+        # fixed, which is operational rather than lossy.
+        paths = [ "/var/lib/gitea" ];
+
+        exclude = [
+          "/var/lib/gitea/log"
+
+          # The bleve code-search index and the queue spool: both rebuilt from
+          # the repositories and the database, both rewritten constantly.
+          "/var/lib/gitea/data/indexers"
+          "/var/lib/gitea/data/queues"
+
+          # Generated repo archives -- the tarball you get from "Download ZIP".
+          # Gitea treats these as a cache and deletes them itself on a cron
+          # (repo-archive DELETE_OLDER_THAN, 24h by default), so archiving them
+          # stores blobs their own owner intends to throw away. Found on the
+          # host; it is not visible anywhere in the nixpkgs module.
+          "/var/lib/gitea/data/repo-archive"
+
+          # A symlink into the nix store, planted by the module's own tmpfiles
+          # rule (`L+ conf/locale -> ${package}/locale`, gitea.nix:773).
+          #
+          # Worth excluding despite being a single symlink, because restoring
+          # it is the problem rather than storing it: it would come back
+          # pointing at whichever gitea store path existed when the snapshot
+          # was taken, which after a version bump or a garbage collection no
+          # longer exists. The tmpfiles rule re-plants the correct one on
+          # activation, so the right move is to let it own that path entirely.
+          "/var/lib/gitea/conf/locale"
+
+          # The two below are DEFENSIVE, not observed: neither directory exists
+          # on the host today. tmp/ appears only once chunked package uploads
+          # are used (gitea.nix:713), and data/sessions/ only if the session
+          # PROVIDER is switched from the default `memory` to `file`. Excluding
+          # them now means neither can start being archived silently later.
+          "/var/lib/gitea/tmp"
+          "/var/lib/gitea/data/sessions"
+
+          # services.gitea.dump.enable is false, so this is empty -- excluded
+          # on the same defensive grounds, so that turning the built-in dump on
+          # does not start storing a second copy of every repository inside
+          # this snapshot.
+          "/var/lib/gitea/dump"
+        ];
+
+        # Kept, having walked the real directory. The two that look like
+        # scratch and are not:
+        #
+        #   data/jwt/       the RSA private key Gitea signs OAuth2/OIDC tokens
+        #                   with. A secret, generated once, living nowhere
+        #                   else -- and not one of the four in custom/conf, so
+        #                   it is easy to miss when reasoning from that list.
+        #   .ssh/           gitea's own authorized_keys, which it rewrites as
+        #                   users add and remove SSH keys. Empty today because
+        #                   nobody has added one.
+      };
+
       dashboard = {
         enable = true;
         name = "Gitea";
@@ -480,16 +653,57 @@ in
       # in postgres. A database-only restore therefore comes back with every
       # credential present and none of them decryptable.
       #
-      # The fix is to lift that generated key into agenix and hand it back via
-      # N8N_ENCRYPTION_KEY_FILE (the nixpkgs module turns any *_FILE variable
-      # into a systemd credential, and n8n resolves any *_FILE suffix itself,
-      # so the two meet without a wrapper). Deliberately not done here, because
-      # doing it means committing a secret that does not exist yet. Note the
-      # order this has to happen in: once n8n has written that file, supplying
-      # a *different* key is a hard startup error ("Mismatching encryption
-      # keys"), so the value that goes into agenix must be the one already on
-      # disk, not a freshly generated one.
+      # That key is now in agenix and handed back via N8N_ENCRYPTION_KEY_FILE
+      # (see the `environment` block above and used-secrets.nix), so the
+      # database and the key that decrypts it are both recoverable -- but from
+      # two different places. The database comes out of the backup below; the
+      # key comes out of the config repo, which is backed up separately. A
+      # restore needs both.
       postgres = true;
+
+      backup = {
+        enable = true;
+
+        # /var/lib/private, not /var/lib -- DynamicUser=true with
+        # StateDirectory=n8n, so the latter is a symlink restic would archive
+        # as a symlink and nothing else.
+        #
+        # Most of n8n's state is in postgres, but not all of it. What is
+        # actually in this tree, checked against the host:
+        #
+        #   .n8n/config     56 bytes, mode 0600. The encryption-key check value
+        #                   n8n compares against N8N_ENCRYPTION_KEY_FILE on
+        #                   every start. See the restore hazard below.
+        #   .n8n/nodes/     community node manifest, and node_modules/ once any
+        #                   are installed. Kept rather than treated as a
+        #                   reinstallable artifact, because reinstalling means
+        #                   npm reaching the internet and this service is held
+        #                   to the egress proxy -- the backup is the reliable
+        #                   path here, not the fallback.
+        #   .n8n/storage/   empty today; n8n's on-disk payload area.
+        #
+        # RESTORE HAZARD, and the reason .n8n/config is worth understanding
+        # rather than just archiving: n8n refuses to start when that file and
+        # N8N_ENCRYPTION_KEY_FILE disagree ("Mismatching encryption keys"). The
+        # two agree today because the agenix secret was lifted from this file
+        # rather than generated fresh. They are therefore a pair: restoring one
+        # without the other, or rotating the agenix key without replacing this
+        # file, is a service that will not boot.
+        paths = [ "/var/lib/private/n8n" ];
+
+        exclude = [
+          "/var/lib/private/n8n/.cache"
+
+          # n8n's own append-only execution log, and it does grow -- the
+          # rotated -3 file is 95 KB against 1 KB for the live one. The
+          # authoritative record of executions is in postgres; this is a
+          # debugging aid.
+          #
+          # The trailing glob covers the live n8nEventLog.log and every rotated
+          # n8nEventLog-N.log alongside it.
+          "/var/lib/private/n8n/.n8n/n8nEventLog*"
+        ];
+      };
 
       # No networkConfinement override, which is worth being explicit about
       # for this service in particular. n8n's entire job is making outbound

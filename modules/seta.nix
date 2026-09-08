@@ -289,12 +289,11 @@
                 How this service's state is captured, and how it is put back.
 
                 The set that this generates is deliberately explicit rather than
-                derived from the service's own module options. `dataDir` and
-                friends are not a reliable source: three services here run
-                DynamicUser=true, where the option says /var/lib/<svc> but the
-                bytes are at /var/lib/private/<svc> and the former is a symlink
-                restic will not follow. A path stated here is a path that was
-                checked.
+                derived from the service's own module options. Services that run
+                DynamicUser=true, must take extra precautions because their option's
+                says /var/lib/<svc> but the bytes are at /var/lib/private/<svc>
+                and the former is a symlink restic will not follow.
+                A path stated here is a path that should be checked.
 
                 The database half needs no option of its own -- `postgres`
                 above is already the manifest, and `backup.enable && postgres`
@@ -370,10 +369,8 @@
                       snapshot through the SQLite API while the service keeps
                       running.
 
-                      Every file listed here should also be excluded from
-                      `paths` (including its -wal/-shm siblings), so the
-                      snapshot carries the consistent copy and not the live one
-                      as well.
+                      Listing a file here also excludes it, and its
+                      -wal/-shm/-journal siblings, from the archived paths.
                     '';
                   };
 
@@ -386,10 +383,7 @@
 
                       For services whose on-disk state cannot be copied
                       consistently while they run and that offer no equivalent
-                      of pg_dump or sqlite .backup -- opencloud's embedded
-                      bbolt/jsoncs3 metadata stores are the case this exists
-                      for. Both filesystems on this host are ext4, so there is
-                      no snapshot to take instead.
+                      of pg_dump or sqlite .backup.
 
                       The restart is wired through the restic module's
                       backupCleanupCommand, which systemd runs in postStop, so
@@ -402,13 +396,6 @@
                     default = 3;
                     description = ''
                       Yearly snapshots to keep for this service's tag.
-
-                      Per-service rather than global because retention here is
-                      partly a legal question rather than a storage one: the
-                      services holding accounting and association records are
-                      subject to Greek statutory retention and need a much
-                      longer floor than a recipe manager does. Everything else
-                      in the forget policy is shared.
                     '';
                   };
                 };

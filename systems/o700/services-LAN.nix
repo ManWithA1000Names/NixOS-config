@@ -174,6 +174,63 @@
       critical = true;
       requiresExSSD = true;
 
+      backup = {
+        enable = true;
+
+        # The application's own state only. The book and manga library is a
+        # separate set (kavita-library, in systems/o700/backup.nix) so that
+        # recovering a broken Kavita takes seconds instead of hours and does
+        # not depend on the bulk transfer succeeding.
+        paths = [ "/var/lib/kavita" ];
+
+        # SQLite rather than the central postgres. Kavita is a .NET/EF Core
+        # application and the module offers no database backend option.
+        #
+        # cache.db is here rather than in `exclude` deliberately, and the choice
+        # is made under uncertainty: its name and its 16 KB next to kavita.db's
+        # 1.2 MB both say "disposable", but that is inference from the file
+        # listing, not from Kavita's source. Capturing it costs a few KB a night
+        # and dropping it costs whatever it turns out to hold, so it is captured
+        # -- the same "keep excludes conservative" rule the exclude list below
+        # follows. It is snapshotted through the SQLite API for the same reason
+        # kavita.db is: it was sitting there with a live -wal and -shm.
+        sqlite = [
+          "/var/lib/kavita/config/kavita.db"
+          "/var/lib/kavita/config/cache.db"
+        ];
+
+        # Both databases and all their -wal/-shm/-journal siblings are excluded
+        # automatically because they are named in `sqlite` above -- see the
+        # exclude derivation in backup.nix.
+        exclude = [
+          "/var/lib/kavita/config/logs"
+          "/var/lib/kavita/config/temp"
+          "/var/lib/kavita/config/cache"
+          # Sibling of cache/, and a cache by the same reading. Found on the
+          # host rather than in the module -- neither this nor cache.db is
+          # visible from the nixpkgs source the rest of these lists were
+          # written from.
+          "/var/lib/kavita/config/cache-long"
+          # Kavita's own periodic self-backup. Backing up a backup doubles the
+          # stored bytes for no additional recoverability.
+          "/var/lib/kavita/config/backups"
+        ];
+
+        # Kept on purpose, having looked at the actual directory: bookmarks/
+        # (saved pages, user data), covers/, images/, fonts/, themes/ and
+        # templates/ (all user-supplied or expensive to regenerate), favicons/
+        # (a cache, but tiny and immutable so it deduplicates to nothing), the
+        # two progress_export CSVs, and appsettings.json -- which Kavita
+        # rewrites from the Nix template on every start, so restoring it is a
+        # no-op, but it is 155 bytes and holds a second copy of the TokenKey.
+
+        # What survives the excludes and matters: config/covers and
+        # config/bookmarks, and secrets/tokenkey -- the 512-bit signing key
+        # named by services.kavita.tokenKeyFile, which nothing in this repo
+        # creates. It was placed by hand, exists only on this disk, and Kavita
+        # will not start without it.
+      };
+
       dashboard = {
         enable = true;
         name = "Kavita";
@@ -207,6 +264,76 @@
 
       postgres = true;
 
+      backup = {
+        enable = true;
+
+        # One path covers media/ (originals, archive and thumbnails),
+        # consume/ (anything dropped in but not yet ingested) and the loose
+        # files at the top level, including nixos-paperless-secret-key.
+        #
+        # That file is the Django SECRET_KEY, generated on first start with
+        # umask 0377 and written nowhere else -- but it is worth being accurate
+        # about how much it costs, because it is easy to over-rank. It signs
+        # session cookies and password-reset links and nothing else here.
+        # Passwords survive it (PBKDF2, per-password salts) and so do API
+        # tokens, which are random authtoken rows rather than anything derived
+        # from it. Losing it means everybody logs in again; it does not make a
+        # single document unreadable.
+        #
+        # The documents are what actually matters in this path, and they are
+        # plain files under media/documents/.
+        paths = [ "/var/lib/paperless" ];
+
+        exclude = [
+          # The Whoosh full-text index. Rebuilt by `document_index reindex`,
+          # and it is rewritten wholesale on every document change -- the worst
+          # dedup profile of anything on this host.
+          "/var/lib/paperless/index"
+
+          # Retrained from the documents themselves -- and by far the largest
+          # single file in any state directory here: 434 MB, rewritten whenever
+          # the classifier retrains. Excluding it is the difference between a
+          # trivial nightly delta for this service and a hundreds-of-megabytes
+          # one.
+          #
+          # The trailing glob is load-bearing and was verified rather than
+          # assumed: restic's `*` matches the empty string, so this pattern
+          # covers the bare `classification_model.pickle` as well as any
+          # suffixed variant. A pattern that silently failed to match would
+          # have cost 434 MB a night without any visible symptom.
+          "/var/lib/paperless/classification_model.pickle*"
+
+          "/var/lib/paperless/log"
+
+          # Celery Beat's periodic-task scheduler state -- last-run timestamps
+          # and nothing else. Found on the host, not in the module: it is
+          # created at runtime and does not appear anywhere in nixpkgs.
+          #
+          # Excluded rather than captured through `sqlite`, which is the
+          # opposite of the call made for kavita's cache.db, and deliberately
+          # so. There the file's role was uncertain, so it was captured. Here it
+          # is not: this tracks when periodic tasks last ran, and restoring a
+          # stale copy is actively worse than starting without one, because
+          # Celery reads it and fires everything it believes is overdue. It is
+          # also the churniest file in the directory -- a 2.6 MB write-ahead log
+          # against a 12 KB database, rewritten continuously.
+          "/var/lib/paperless/celerybeat-schedule.db*"
+        ];
+
+        # Kept, having looked at the actual directory: media/ (the documents,
+        # the entire point), consume/ (anything dropped in but not yet
+        # ingested), nixos-paperless-secret-key, and src-version.
+
+        # media/documents/thumbnails is deliberately NOT excluded. It is
+        # regenerable in principle, but only by re-rendering every document,
+        # and it deduplicates well because a thumbnail never changes once
+        # written.
+
+        # Personal and association records are mixed in this archive, so the
+        # stricter business retention governs all of it.
+        keepYearly = 10;
+      };
+
       dashboard = {
         enable = true;
         name = "Paperless";
@@ -225,6 +352,22 @@
     mealie = {
       critical = true;
       postgres = true;
+
+      backup = {
+        enable = true;
+
+        # /var/lib/private, not /var/lib: DynamicUser=true with
+        # StateDirectory=mealie. Holds recipe images and assets, and the
+        # generated .secret used to sign tokens.
+        paths = [ "/var/lib/private/mealie" ];
+
+        exclude = [
+          "/var/lib/private/mealie/.temp"
+          # Mealie's own export bundles. A backup of a backup.
+          "/var/lib/private/mealie/backups"
+          "/var/lib/private/mealie/mealie.log"
+        ];
+      };
 
       dashboard = {
         enable = true;
@@ -272,6 +415,56 @@
         "opencloud"
         "opencloud-init-config"
       ];
+
+      backup = {
+        enable = true;
+
+        # The one service on this host that is stopped for its own backup.
+        #
+        # It has no pg_dump and no sqlite .backup equivalent: its state is a
+        # set of embedded stores (bbolt for idm, jsoncs3 for shares, nats for
+        # the event bus) that offer no snapshot API, and both filesystems here
+        # are ext4, so there is no filesystem-level snapshot to take instead.
+        # Copying them live yields a crash-consistent image of a metadata store
+        # mid-write, which is precisely the file that decides who can see which
+        # space. The blobs themselves would be fine -- they are content-
+        # addressed -- but a correct blob store with torn metadata is not a
+        # recoverable instance.
+        #
+        # The restart is wired through the restic module's
+        # backupCleanupCommand, which systemd runs in postStop, so the service
+        # comes back even when the backup fails. systems/o700/backup.nix schedules
+        # this set second-to-last so the downtime lands at the end of the
+        # window rather than in the middle of it.
+        stopUnits = true;
+
+        # /etc/opencloud is not optional and is the reason this has two paths.
+        # opencloud.yaml is written once at runtime by opencloud-init-config
+        # and holds every inter-service credential the instance was built
+        # around -- machine auth API key, jwt secret, transfer secret, the
+        # system user's id. It is not in /var/lib and not in the nix store, so
+        # a snapshot of the state directory alone restores an instance that
+        # cannot be opened.
+        paths = [
+          "/var/lib/opencloud"
+          "/etc/opencloud"
+        ];
+
+        exclude = [
+          # The bleve search index. Excluded because bleve rewrites segment
+          # files on every change, which is the churn profile that inflates a
+          # deduplicating repository fastest.
+          #
+          # The cost is real and is NOT self-healing: OpenCloud builds this
+          # index from events, so a restored instance has an empty one and
+          # nothing triggers a full rebuild on its own. A reindex has to be run
+          # by hand afterwards -- see section 5 of docs/backup-and-restore.md.
+          "/var/lib/opencloud/search"
+
+          # Rendered previews, regenerated on demand from the blobs.
+          "/var/lib/opencloud/thumbnails"
+        ];
+      };
 
       dashboard = {
         enable = true;

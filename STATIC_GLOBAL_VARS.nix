@@ -80,6 +80,64 @@ let
       MEDIA_ROOT = "${EX-SSD}/media";
 
       BACKUP_ROOT = "${EX-SSD}/backup";
+
+      # The restic repository holding every backup set. On the SSD rather than
+      # the root spindle: the root disk is the thing most likely to be lost, and
+      # a backup that dies with its source is not one. It also keeps the nightly
+      # write load off the disk whose I/O contention took this host down once
+      # already (see the swapDevices note in o700/hardware-configuration.nix).
+      RESTIC_REPO = "${BACKUP_ROOT}/restic";
+
+      # Where each set's database dumps and version manifest are written before
+      # restic archives them. Deliberately NOT inside RESTIC_REPO -- restic
+      # refuses to back up a path inside its own repository, and the two have
+      # opposite lifetimes: the repo is permanent, this is wiped after every run.
+      BACKUP_STAGING = "${BACKUP_ROOT}/staging";
+
+      # Kavita's book and manga library.
+      #
+      # MUST BE SET before the kavita-library backup set does anything useful.
+      # Unlike the arr stack, whose directories are created by tmpfiles rules in
+      # services-internal.nix, Kavita's library paths are configured in-app and
+      # live only inside its SQLite database -- so nothing in this repo knows
+      # where they are. Naming the path here rather than leaving it implicit is
+      # what lets the backup set reference it at all.
+      #
+      # Empty string means "not configured yet", and systems/o700/backup.nix asserts
+      # on it rather than silently backing up nothing.
+      BOOKS = "${EX-SSD}/books";
+    };
+
+    # Offsite backup target. Not secret -- a bucket name is not a credential,
+    # and the actual keys live in secrets/restic-b2.age. Kept here so the repo
+    # string is built in one place and the restore script and the backup units
+    # cannot disagree about which bucket they are talking to.
+    #
+    # The S3-compatible endpoint rather than restic's native `b2:` backend:
+    # upstream recommends it, and it is the form that works through this host's
+    # egress proxy, which permits CONNECT on 443 only (networking.nix,
+    # tinyproxy ConnectPort). An SFTP-based provider would need that hole
+    # widened; this needs nothing.
+    #
+    # MUST BE SET before the offsite tier does anything. Empty means "local
+    # only", which systems/o700/backup.nix handles by not generating the offsite
+    # unit at all rather than by generating one that fails every night.
+    BACKUP = {
+      # The bucket NAME, not the bucket ID. restic addresses S3 buckets by
+      # name; the 24-character hex id B2 also shows you belongs to B2's native
+      # API and is not used anywhere here.
+      #
+      # Must match the bucket exactly: B2 bucket names are case-sensitive
+      # identifiers, and the S3-compatible endpoint additionally addresses them
+      # as a DNS label in virtual-hosted style, where mixed case is a known
+      # source of signature failures. Lowercase is both required and correct.
+      # Names are globally unique and cannot be renamed.
+      b2Bucket = "backup-o700";
+
+      # Verified against the bucket's own "Endpoint" field in the B2 console.
+      # It is region-specific, so it must be re-checked if the bucket is ever
+      # recreated elsewhere.
+      b2Endpoint = "s3.eu-central-003.backblazeb2.com";
     };
   };
 in

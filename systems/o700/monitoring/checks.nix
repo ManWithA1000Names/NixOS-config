@@ -1,18 +1,48 @@
 {
+  config,
   pkgs,
   lib,
   PATHS,
+  BACKUP,
   USERNAME,
   ...
 }:
 let
   stateDir = "/var/lib/host-audit";
 
-  # Two days. The vaultwarden backup runs nightly, so this tolerates exactly one
-  # missed run before complaining -- long enough that a single transient failure
-  # is absorbed by the next night's success, short enough that a permanently
+  # Two days. The backup runs nightly, so this tolerates exactly one missed run
+  # before complaining -- long enough that a single transient failure is
+  # absorbed by the next night's success, short enough that a permanently
   # broken backup is caught before the window matters.
   backupMaxAgeSeconds = 172800;
+
+  # Three days for the offsite copy. One night more than the local tier gets,
+  # because the copy depends on the whole nightly run having finished and on a
+  # third party being reachable -- so a single slow night is a worse reason to
+  # send a message here than it is locally. It is still short enough that a
+  # permanently broken upload is caught inside a week.
+  offsiteMaxAgeSeconds = 259200;
+
+  # The tags this expects to find, taken from the manifest that generates the
+  # backup jobs rather than restated. A set added to systems/o700/backup.nix is
+  # therefore watched from its first night, and -- the direction that actually
+  # matters -- a set that stops producing snapshots is reported as missing
+  # rather than quietly dropping out of the check along with its job.
+  expectedSets = lib.sort (a: b: a < b) (builtins.attrNames config.services.restic.backups);
+
+  offsiteRepo = "s3:${BACKUP.b2Endpoint}/${BACKUP.b2Bucket}";
+  offsiteEnabled = BACKUP.b2Bucket != "";
+
+  # One `restic snapshots` per repository, not one per tag. Against B2 each
+  # call loads the repository index, so ten of them would be ten index loads a
+  # day for information a single listing already contains.
+  newestPerTag = ''
+    restic snapshots --json 2>/dev/null \
+      | jq -r '[.[] | . as $s | ($s.tags // [])[] | select(. != "o700") | {tag: ., t: $s.time}]
+               | group_by(.tag)
+               | map({tag: .[0].tag, newest: (map(.t) | max)})
+               | .[] | "\(.tag) \(.newest)"'
+  '';
 
   audit-script = pkgs.writeShellApplication {
     name = "host-audit";
@@ -20,32 +50,71 @@ let
       coreutils
       findutils
       util-linux
+      gnugrep
+      jq
+      restic
     ];
     text = ''
       problems=0
 
-      if mountpoint -q ${PATHS.EX-SSD}; then
-        # find -printf %T@ gives seconds.microseconds; the decimal is stripped
-        # below. The whole pipeline is guarded because writeShellApplication
-        # sets `pipefail`, and head closing the pipe early makes find exit
-        # non-zero -- which would abort the audit rather than report on it.
-        newest=$(find ${PATHS.BACKUP_ROOT}/warden/ -type f -printf '%T@\n' 2>/dev/null \
-                 | sort -rn | head -1) || newest=""
+      # Checks one repository's snapshot ages against the expected set list.
+      # Writes findings to stdout and returns the number of them, so the two
+      # calls below accumulate into the same `problems` counter the rest of
+      # this script uses.
+      check_repo() {
+        local label=$1 maxage=$2 found bad=0 newest age
+        bad=0
 
-        if [ -z "$newest" ]; then
-          echo "no vaultwarden backup found under ${PATHS.BACKUP_ROOT}/warden"
-          problems=1
-        else
-          age=$(( $(date +%s) - ''${newest%.*} ))
-          if [ "$age" -gt ${toString backupMaxAgeSeconds} ]; then
-            echo "vaultwarden backup is $(( age / 3600 ))h old"
-            problems=1
-          fi
+        # writeShellApplication sets pipefail, and this pipeline is allowed to
+        # produce nothing (an uninitialised repository, an unreachable bucket),
+        # so the whole thing is guarded rather than aborting the audit.
+        found=$(${newestPerTag}) || found=""
+
+        if [ -z "$found" ]; then
+          echo "$label: no snapshots at all -- the repository is empty or unreachable"
+          return 1
         fi
+
+        local set
+        for set in ${lib.concatStringsSep " " expectedSets}; do
+          newest=$(printf '%s\n' "$found" | { grep "^$set " || true; } | cut -d' ' -f2)
+          if [ -z "$newest" ]; then
+            echo "$label: no snapshot has ever been tagged '$set'"
+            bad=$(( bad + 1 ))
+            continue
+          fi
+          age=$(( $(date +%s) - $(date -d "$newest" +%s) ))
+          if [ "$age" -gt "$maxage" ]; then
+            echo "$label: '$set' snapshot is $(( age / 3600 ))h old"
+            bad=$(( bad + 1 ))
+          fi
+        done
+
+        return "$bad"
+      }
+
+      if mountpoint -q ${PATHS.EX-SSD}; then
+        export RESTIC_PASSWORD_FILE=${config.age.secrets.restic-password.path}
+        export RESTIC_CACHE_DIR=/var/cache/o700-restic
+
+        export RESTIC_REPOSITORY=${PATHS.RESTIC_REPO}
+        check_repo local ${toString backupMaxAgeSeconds} || problems=1
+
+        ${lib.optionalString offsiteEnabled ''
+          # Sourced rather than exported per-call: these are the B2 credentials
+          # and they are only meaningful for the offsite listing.
+          set -a
+          # shellcheck disable=SC1091
+          source ${config.age.secrets.restic-b2.path}
+          set +a
+
+          export RESTIC_REPOSITORY=${offsiteRepo}
+          check_repo offsite ${toString offsiteMaxAgeSeconds} || problems=1
+        ''}
       else
         # Reported rather than fatal: the drive being absent is the very state
-        # this is here to notice. Backup age is skipped because it is not
-        # meaningful when the filesystem holding the backups is not there.
+        # this is here to notice. Snapshot ages are skipped because they are not
+        # meaningful when the filesystem holding the repository is not there.
         echo "external SSD is not mounted at ${PATHS.EX-SSD}"
         problems=1
       fi
@@ -107,6 +176,11 @@ in
       Type = "oneshot";
       ExecStart = lib.getExe audit-script;
       StateDirectory = "host-audit";
+
+      # Shared with the backup units. restic re-downloads the repository index
+      # on every invocation without it, which for the offsite check means
+      # pulling it from B2 daily.
+      CacheDirectory = "o700-restic";
 
       # Runs as root: reads authorized_keys (root:root) and walks the whole
       # root filesystem looking for SUID bits.

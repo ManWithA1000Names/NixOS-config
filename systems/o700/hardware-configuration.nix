@@ -129,7 +129,21 @@
     # infrastructure.
     services =
       let
-        infraRequiresExSSD = [ ];
+        # The backup units all read or write ${PATHS.BACKUP_ROOT}. Without
+        # this they would run against the bare mount-point on the root
+        # filesystem when the drive is absent -- restic would initialise a
+        # fresh, empty repository on the spindle and every subsequent run would
+        # report success while backing up into a directory that vanishes the
+        # moment the SSD is plugged back in.
+        #
+        # The per-set restic units are named by the module that generates them;
+        # spelling them out here would be a second list to keep in step, so
+        # they are derived from the same manifest.
+        infraRequiresExSSD = [
+          "o700-backup"
+          "o700-backup-prune"
+        ]
+        ++ map (set: "restic-backups-${set}") (builtins.attrNames config.services.restic.backups);
 
         setaRequiresExSSD = lib.concatMap (meta: meta.units) (
           builtins.filter (meta: meta.requiresExSSD) (builtins.attrValues config.seta)

@@ -87,6 +87,55 @@ _deploy-o700 ACTION:
     # key and the agent. Privilege is only needed on the far end, via --sudo.
     nixos-rebuild --flake .#o700 --target-host o700 --sudo --ask-sudo-password --print-build-logs {{ ACTION }}
 
+# Run the full nightly backup on 'o700' now, and follow it as it goes.
+[script]
+backup-o700:
+    if [ "$(hostname)" = "o700" ]; then
+        sudo systemctl start --wait o700-backup.service
+        exit $?
+    fi
+    # --wait so this recipe's exit status is the backup's. Without it systemctl
+    # returns as soon as the job is enqueued and a failed backup looks like a
+    # successful command.
+    ssh -t o700 sudo systemctl start --wait o700-backup.service
+
+# What was backed up, when, and how stale it is -- both repositories.
+[script]
+backup-status-o700:
+    if [ "$(hostname)" = "o700" ]; then
+        sudo o700-restore list
+        exit $?
+    fi
+    # sudo, because the restic repository password is a root-owned agenix
+    # secret -- `o700-restore list` as a normal user cannot open the repository.
+    ssh -t o700 sudo o700-restore list
+
+# Run it without --yes first: the remote command prompts, and -t keeps the tty
+# that the confirmation and the version guard need.
+#
+# Put one service back to a snapshot. SNAPSHOT is an id or 'latest'.
+[script]
+restore-o700 SET SNAPSHOT="latest" *ARGS="":
+    if [ "$(hostname)" = "o700" ]; then
+        sudo o700-restore restore {{ SET }} {{ SNAPSHOT }} {{ ARGS }}
+        exit $?
+    fi
+    ssh -t o700 sudo o700-restore restore {{ SET }} {{ SNAPSHOT }} {{ ARGS }}
+
+# The safe order for anything that bumps a package version: it guarantees a
+# snapshot taken under the OLD binary exists, which is the only snapshot a
+# restore can use without the version guard refusing.
+#
+# Deliberately a separate recipe rather than folded into switch-o700. Making
+# every deploy wait for a full backup would train you to bypass it, and most
+# deploys change nothing that matters here.
+#
+# Take a backup of 'o700', then deploy to it.
+[script]
+backup-then-switch-o700:
+    just backup-o700
+    just switch-o700
+
 # Update the channel and all other inputs. This DOES NOT trigger a rebuild!
 update CHANNEL="":
     if [ -n "{{ CHANNEL }}" ]; then sed 's@github:NixOS/nixpkgs/nixos-[0-9][0-9]\.[0-9][0-9]@github:NixOS/nixpkgs/nixos-{{ CHANNEL }}@' -i flake.nix; fi
