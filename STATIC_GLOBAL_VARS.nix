@@ -46,6 +46,11 @@ let
       MEALIE = 8002;
       QBITTORRENT = 8080;
       JELLYFIN = 8096;
+      # claude-code-api. Upstream's own default for `listen`, restated here
+      # because caddy has to name the same number: the vhost is generated from
+      # seta.<svc>.proxy.port, so leaving the service on its default and the
+      # proxy on a guess is how the two drift apart.
+      CLAUDE_CODE_API = 8817;
       TINYPROXY = 8888;
       SONARR = 8989;
       # Only the proxy front door. Fullstack mode starts ~34 more listeners

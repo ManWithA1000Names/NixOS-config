@@ -11,6 +11,14 @@ in
   "opencloud-env.age".publicKeys = systems ++ users;
   "n8n-encryption-key.age".publicKeys = systems ++ users;
 
+  # Two files rather than one, because they are two unrelated credentials
+  # pointing in opposite directions: the api-key is what LAN *clients* present
+  # to this host, the oauth-token is what this host presents to Anthropic.
+  # The module takes them as separate *File options and reads each through its
+  # own LoadCredential, so there is nothing to gain by packing them together.
+  "claude-code-api-key.age".publicKeys = systems ++ users;
+  "claude-code-oauth-token.age".publicKeys = systems ++ users;
+
   # The restic repository password and the Backblaze B2 application key.
   #
   # `users` -- the `operating` key held on big-boss -- is not optional padding

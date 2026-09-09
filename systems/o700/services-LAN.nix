@@ -86,6 +86,34 @@
       };
     };
 
+    claude-code-api = {
+      enable = true;
+
+      # Loopback, like every other backend here -- caddy is the only path in,
+      # and the firewall dropping this port is then the second layer rather
+      # than the only one. Stated rather than inherited so the number comes
+      # from PORTS, which is also what the generated vhost is built from.
+      listen = "127.0.0.1:${toString PORTS.CLAUDE_CODE_API}";
+
+      # Not optional here, whatever upstream's default says. `tools` is left at
+      # "default", so a prompt reaching this endpoint is a shell in the unit's
+      # StateDirectory -- and the exposure guard below only narrows who can
+      # send one to the LAN, which includes every phone and TV in the house.
+      # The key is the half of that which does not depend on the network.
+      apiKeyFile = config.age.secrets.claude-code-api-key.path;
+
+      # The credential the CLI presents to Anthropic. Supplied here so the unit
+      # is self-sufficient on first boot: the alternative is OAuth state seeded
+      # by hand into /var/lib/private/claude-code-api, which nothing in this
+      # repo could reproduce and no backup here captures.
+      oauthTokenFile = config.age.secrets.claude-code-oauth-token.path;
+
+      # Everything else stays on upstream's defaults deliberately -- haiku as
+      # the default model, all three models allowed, 3 concurrent invocations,
+      # remote image fetching off. Narrowing any of them is a decision to make
+      # from measured usage, not from first principles.
+    };
+
     homepage-dashboard = {
       enable = true;
       listenPort = PORTS.DASHBOARD;
@@ -481,6 +509,36 @@
         enable = true;
         port = PORTS.OPENCLOUD;
         domain = "cloud.${DOMAIN}";
+        exposure = "LAN";
+      };
+    };
+
+    claude-code-api = {
+      critical = true;
+
+      # networkConfinement left at its default of enabled, and it holds here
+      # for the reason it holds for the Node services already on this host:
+      # the CLI is a Node program, the module sets NODE_USE_ENV_PROXY=1
+      # itself, and the only destination that matters -- api.anthropic.com --
+      # is reached on 443, which is the one port tinyproxy permits CONNECT to.
+      # So the confinement costs nothing and every call the CLI makes lands in
+      # the egress log like everything else.
+
+      # No backup entry, and that is a decision rather than an omission. The
+      # state directory holds the CLI's OAuth cache, which is re-derived from
+      # oauthTokenFile on every start, and conversation transcripts, which
+      # expire after sessionTTL (2h) and are a cache of somebody else's
+      # chat history rather than a record this host owns. There is nothing in
+      # there a restore would want.
+
+      # No dashboard entry either: the tile would link to https://<domain>/,
+      # and this service has no UI to serve there -- it answers /v1/... and
+      # /healthz and 404s everything else.
+
+      proxy = {
+        enable = true;
+        port = PORTS.CLAUDE_CODE_API;
+        domain = "claude.${DOMAIN}";
         exposure = "LAN";
       };
     };

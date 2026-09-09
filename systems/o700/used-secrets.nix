@@ -42,6 +42,27 @@ _: {
     # a refusal to boot rather than a warning.
     n8n-encryption-key.file = ../../secrets/n8n-encryption-key.age;
 
+    # The shared bearer key LAN clients must present to claude-code-api, and
+    # the long-lived Claude Code OAuth token the service presents to Anthropic.
+    #
+    # No owner, and forced rather than merely unnecessary for the same reason
+    # n8n-encryption-key above is: the unit runs DynamicUser=true, so there is
+    # no stable uid to chown to. Both reach the process through systemd
+    # LoadCredential, which PID 1 opens as root before dropping to the dynamic
+    # user.
+    #
+    # Unlike n8n's key, a trailing newline is harmless in both: the unit's
+    # start script reads them with `$(cat ...)`, and command substitution
+    # strips trailing newlines. Nothing else in either file is forgiving,
+    # though -- a comment line or a `KEY=` prefix becomes part of the
+    # credential, since neither is parsed.
+    #
+    # The oauth-token is what `claude setup-token` prints on a machine with a
+    # browser -- big-boss, not o700. It is unrelated to the api-key: one is a
+    # subscription credential, the other is a password of our own choosing.
+    claude-code-api-key.file = ../../secrets/claude-code-api-key.age;
+    claude-code-oauth-token.file = ../../secrets/claude-code-oauth-token.age;
+
     # No owner, same reason as `alerting`: every consumer is a systemd unit
     # running as root, which is not a convenience but a requirement -- the
     # backup jobs read /var/lib/private, which is 0700 root:root, so the three

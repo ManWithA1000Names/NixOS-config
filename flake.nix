@@ -4,6 +4,21 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     agenix.url = "github:ryantm/agenix";
+
+    # Not in nixpkgs -- this is our own flake, and it ships both the package
+    # and the NixOS module that declares services.claude-code-api.
+    #
+    # `follows` where agenix deliberately does not: agenix only needs a nixpkgs
+    # to build the agenix CLI, but this one builds a Go binary that shells out
+    # to `pkgs.claude-code`. Left on its own nixos-unstable pin, o700 would run
+    # a Claude Code CLI from a different channel than everything else on the
+    # host, download a second nixpkgs to get it, and drift from it silently on
+    # every `nix flake update`. Upstream needs go >= 1.23 and nixos-26.05 has
+    # 1.26.7, so nothing is lost by building it against our channel.
+    claude-code-api = {
+      url = "github:ManWithA1000Names/claude-code-api";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -11,6 +26,7 @@
       self,
       nixpkgs,
       agenix,
+      claude-code-api,
       ...
     }:
     let
@@ -68,6 +84,7 @@
           configRevision
 
           agenix.nixosModules.default
+          claude-code-api.nixosModules.default
           ./modules/seta.nix
 
           ./systems/common/nix.nix
