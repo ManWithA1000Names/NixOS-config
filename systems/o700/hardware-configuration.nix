@@ -21,17 +21,6 @@
 
     kernelModules = [ "kvm-intel" ];
 
-    # Load the NVIDIA modules early so that udev rules (which create
-    # /dev/nvidia*, /dev/nvidia-uvm, etc.) fire before any service starts.
-    # nvidia_uvm is intentionally omitted here: the nvidia module sets a
-    # softdep so it loads automatically after nvidia via modprobe, which is
-    # the correct ordering on non-NVLink hardware.
-    initrd.kernelModules = [
-      "nvidia"
-      "nvidia_modeset"
-      "nvidia_drm"
-    ];
-
     kernelParams = [ "consoleblank=30" ];
 
     extraModulePackages = [ ];
@@ -154,39 +143,16 @@
       });
   };
 
-  nixpkgs = {
-    hostPlatform = lib.mkDefault "x86_64-linux";
-
-    config.problems.handlers.nvidia-x11.broken = "ignore";
-    config.problems.handlers.nvidia-kernel-modules.broken = "ignore";
-  };
+  nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
 
   hardware = {
     cpu.intel.updateMicrocode = lib.mkDefault config.hardware.enableRedistributableFirmware;
-
-    # Required for EGL/render-node access (e.g. ffmpeg -hwaccel cuda,
-    # headless OpenGL). Does not start a display server.
     graphics.enable = true;
-
-    nvidia = {
-      open = false;
-      # Exposes /dev/dri/renderD* so compute clients (ffmpeg, etc.) can
-      # reach the GPU without a display. No GLX patch needed headlessly.
-      modesetting.enable = true;
-      package = config.boot.kernelPackages.nvidiaPackages.legacy_390;
-    };
   };
 
-  services = {
-    # Activates hardware.nvidia (udev rules, kernel modules, driver libraries)
-    # without starting X. services.xserver.enable remains false (default).
-    xserver.videoDrivers = [ "nvidia" ];
-
-    logind.settings.Login = {
-      HandleLidSwitch = "ignore";
-      HandleLidSwitchDocked = "ignore";
-    };
-
+  services.logind.settings.Login = {
+    HandleLidSwitch = "ignore";
+    HandleLidSwitchDocked = "ignore";
   };
 
   security.rtkit.enable = true;
