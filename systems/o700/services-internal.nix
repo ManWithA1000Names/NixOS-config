@@ -186,7 +186,7 @@ in
         port = PORTS.QBITTORRENT;
         domain = "qbit-internal.${DOMAIN}";
         exposure = "NONE";
-        headers = {
+        headers_up = {
           Host = "localhost:${toString PORTS.QBITTORRENT}";
         };
         removeHeaders = [

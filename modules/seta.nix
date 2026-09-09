@@ -131,6 +131,12 @@
                   headers = lib.mkOption {
                     type = lib.types.attrsOf lib.types.str;
                     default = { };
+                    description = "Request headers  sent along to the client (header Name Value).";
+                  };
+
+                  headers_up = lib.mkOption {
+                    type = lib.types.attrsOf lib.types.str;
+                    default = { };
                     description = "Request headers forwarded upstream (header_up Name Value).";
                   };
 

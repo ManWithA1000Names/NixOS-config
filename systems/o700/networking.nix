@@ -89,7 +89,8 @@ let
       # Per-service headers last, so a service can still override: qbittorrent
       # replaces Host, and anything here could need the same treatment.
       headerLines =
-        lib.mapAttrsToList (k: v: "header_up ${k} ${v}") (forwardedHeaders // proxy.headers)
+        lib.mapAttrsToList (k: v: "header ${k} ${v}") (proxy.headers)
+        ++ lib.mapAttrsToList (k: v: "header_up ${k} ${v}") (forwardedHeaders // proxy.headers_up)
         ++ map (k: "header_up -${k}") proxy.removeHeaders;
 
       # No bare `reverse_proxy` form any more: forwardedHeaders makes headerLines
