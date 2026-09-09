@@ -306,8 +306,6 @@ in
         # it is listed here rather than via services.qbittorrent.openFirewall --
         # that option would open the WebUI port too.
         PORTS.QBITTORRENT_TORRENT
-
-        PORTS.JELLYFIN
       ];
 
       # Caddy enables HTTP/3 by default and advertises it via Alt-Svc. Without
@@ -351,6 +349,15 @@ in
         # service discovery from other machines breaks.
         ip saddr ${IP.lan} udp dport ${toString PORTS.MDNS} accept comment "mDNS LAN"
 
+        # Jellyfin, reached directly rather than through caddy. House clients --
+        # the TV in particular -- connect to this host by address, and jellyfin
+        # binds 0.0.0.0 by design. Scoped to the LAN CIDR for the same reason
+        # dnsmasq is: enp4s0 also carries globally routable IPv6, and an
+        # allowedTCPPorts entry has no source restriction on either family.
+        #
+        # This now agrees with seta.jellyfin.proxy.exposure = "LAN" instead of
+        # quietly overriding it.
+        ip saddr ${IP.lan} tcp dport ${toString PORTS.JELLYFIN} accept comment "jellyfin LAN"
       '';
     };
   };
