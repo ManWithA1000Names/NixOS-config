@@ -1118,6 +1118,21 @@ in
       # writable directory, so LogFile above has nowhere to land. LogsDirectory
       # creates /var/log/tinyproxy owned by that user on start.
       { tinyproxy.serviceConfig.LogsDirectory = "tinyproxy"; }
+
+      # Caddy's access log is evidence, not chatter: two fail2ban jails read it
+      # and it is the only record that a request happened. journald's default
+      # of 10000 messages per 30s (journald.conf(5)) is per-service, so a run
+      # above ~333 req/s silences caddy in the journal for the rest of each
+      # window -- and with it every jail that counts on it. That threshold is
+      # not theoretical; it is the shape of exactly the traffic worth banning.
+      #
+      # Per-unit rather than raising RateLimitBurst globally, which would let
+      # any chatty service eat the 10G SystemMaxUse in monitoring.nix.
+      #
+      # 0 disables the limit for this unit. The bound that remains is
+      # SystemMaxUse, which evicts oldest-first -- so a flood costs retention
+      # rather than costing bans, which is the right way round.
+      { caddy.serviceConfig.LogRateLimitBurst = 0; }
     ]
 
     # The enforcement half of the proxy story below: globalEnvironment asks
