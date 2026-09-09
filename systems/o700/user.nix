@@ -23,7 +23,7 @@
 
     openssh.authorizedKeys.keys = [ (builtins.readFile ../../public-keys/id_ed25519.pub) ];
 
-    hashedPasswordFile = config.agenix.secrets.user-password.path;
+    hashedPasswordFile = config.age.secrets.user-password.path;
 
     packages = with pkgs; [
       fd
