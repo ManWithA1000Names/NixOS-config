@@ -344,18 +344,9 @@
       enable = true;
       port = PORTS.NETDATA;
 
-      # The CSP is a backstop for the bundled dashboard's third-party calls.
-      # Most of them -- Google Tag Manager, PostHog, Sentry -- are already dead
-      # because the agent build hardcodes `tracking: false`, and the registry
-      # iframe is handled at its source above. This catches the rest (a Prismic
-      # news feed, a marketing counter on cloudfunctions.net, cdnjs for PDF
-      # export) and, more to the point, anything a future bundle adds. Only
-      # connect-src and frame-src are constrained: script-src is left alone
-      # because the dashboard's own bundle is what would break.
-      config = ''
-        header Content-Security-Policy "connect-src 'self'; frame-src 'self'"
-        reverse_proxy localhost:${toString PORTS.NETDATA}
-      '';
+      headers = {
+        Content-Security-Policy = "connect-src 'self'; frame-src 'self'";
+      };
 
       domain = "netdata-internal.${DOMAIN}";
       exposure = "NONE";
