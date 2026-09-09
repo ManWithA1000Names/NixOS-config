@@ -701,6 +701,19 @@ in
             ignoreregex = "";
           };
         };
+
+        odoo = {
+          settings = {
+            journalmatch = "_SYSTEMD_UNIT=odoo.service";
+            maxretry = 5;
+            findtime = "10m";
+            action = "%(banaction_allports)s[name=odoo]";
+          };
+          filter.Definition = {
+            failregex = ''^ \d+ INFO \S+ \S+ Login failed for db:\S+ login:\S+ from <HOST>'';
+            ignoreregex = "";
+          };
+        };
       };
     };
 
