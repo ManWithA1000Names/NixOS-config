@@ -259,6 +259,14 @@ in
         # fails visibly rather than quietly orphaning the credential store.
         N8N_ENCRYPTION_KEY_FILE = config.age.secrets.n8n-encryption-key.path;
 
+        # Restated rather than inherited, for the same reason the diagnostics
+        # flags above are: both are correct defaults in n8n 2.x, and both are
+        # defaults rather than guarantees. This service is exposure = WAN and
+        # its Code nodes are in-process JavaScript, so a default that moves
+        # under a version bump moves remote code execution with it.
+        N8N_BLOCK_ENV_ACCESS_IN_NODE = true;
+        NODES_EXCLUDE = ''["n8n-nodes-base.executeCommand","n8n-nodes-base.readWriteFile"]'';
+
         # State in the centralized postgres rather than n8n's default SQLite
         # under N8N_USER_FOLDER, for the reason given on the postgresql block
         # in services-internal.nix: one thing to back up rather than one per
