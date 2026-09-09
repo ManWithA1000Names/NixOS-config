@@ -417,6 +417,24 @@ in
         MaxAuthTries = 3;
         LoginGraceTime = "30s";
 
+        # Nothing here forwards an agent, and this host is the one most likely
+        # to be compromised first -- a forwarded agent on it is a usable key for
+        # every host that key opens, big-boss included. Refusing server-side
+        # means an accidental `ssh -A` cannot cost anything.
+        AllowAgentForwarding = false;
+
+        # Layer-3 tunnelling. Never used here, and it is the one forwarding
+        # primitive that puts a network interface on the far side.
+        PermitTunnel = "no";
+
+        # Off by default in modern OpenSSH; stated because it is authentication
+        # surface rather than a feature, and defaults are not guarantees.
+        GSSAPIAuthentication = false;
+
+        # ssh -L stays on -- see the note above -- but nothing needs to forward
+        # a listener *from* this host into the network.
+        GatewayPorts = "no";
+
         # LogLevel = "VERBOSE" is set by the fail2ban module via mkDefault. It
         # also puts each accepted login's key fingerprint into the journal, which
         # is what makes "somebody logged in with an unrecognised key" answerable.
