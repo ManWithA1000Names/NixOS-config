@@ -79,5 +79,7 @@ _: {
     # o700-backup-prune runs `forget --prune` offsite. See section 9 of
     # docs/backup-and-restore.md for what that leaves unprotected.
     restic-b2.file = ../../secrets/restic-b2.age;
+
+    user-password.file = ../../secrets/user-password.age;
   };
 }

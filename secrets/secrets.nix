@@ -20,4 +20,6 @@ in
   # the backups stay readable from big-boss with o700 absent.
   "restic-password.age".publicKeys = systems ++ users;
   "restic-b2.age".publicKeys = systems ++ users;
+
+  "user-password.age".publicKeys = [ o700 ] ++ users;
 }
