@@ -45,7 +45,6 @@
           configRevision
 
           ./systems/common/nix.nix
-          ./systems/common/user.nix
           ./systems/common/programs.nix
           ./systems/common/localization.nix
 
@@ -72,7 +71,6 @@
           ./modules/seta.nix
 
           ./systems/common/nix.nix
-          ./systems/common/user.nix
           ./systems/common/programs.nix
           ./systems/common/localization.nix
 
