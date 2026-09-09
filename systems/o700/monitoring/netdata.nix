@@ -345,7 +345,7 @@
       port = PORTS.NETDATA;
 
       headers = {
-        Content-Security-Policy = "connect-src 'self'; frame-src 'self'";
+        Content-Security-Policy = ''"connect-src 'self'; frame-src 'self'"'';
       };
 
       domain = "netdata-internal.${DOMAIN}";
