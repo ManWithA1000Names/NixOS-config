@@ -5,9 +5,14 @@
   ];
 
   users.users.${USERNAME} = {
+    description = "The human user.";
+    isNormalUser = true;
+
     extraGroups = [
+      "wheel"
+      "kvm"
+      "input"
       "networkmanager"
-      "docker"
     ];
 
     packages = with pkgs; [
@@ -35,5 +40,7 @@
       grimblast
       hyprpicker
     ];
+
+    shell = pkgs.fish;
   };
 }
