@@ -95,7 +95,7 @@ let
       # No bare `reverse_proxy` form any more: forwardedHeaders makes headerLines
       # non-empty for every service that goes through this template.
       upstream = port: ''
-        ${lib.mapAttrsToList (k: v: "header ${k} ${v}") (proxy.headers)}
+        ${lib.concatStringsSep "\n      " (lib.mapAttrsToList (k: v: "header ${k} ${v}") (proxy.headers))}
         reverse_proxy localhost:${toString port} {
           ${lib.concatStringsSep "\n      " headerLines}
         }
