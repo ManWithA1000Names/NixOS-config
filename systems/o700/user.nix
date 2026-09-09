@@ -6,6 +6,10 @@
   ...
 }:
 {
+  users.mutableUsers = false;
+
+  users.users.root.hashedPassword = "!";
+
   users.users.${USERNAME} = {
     description = "The human user.";
     isNormalUser = true;
