@@ -34,7 +34,6 @@
       hyprpaper
       grimblast
       hyprpicker
-      popcorntime
     ];
   };
 }
