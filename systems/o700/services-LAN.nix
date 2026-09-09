@@ -509,10 +509,14 @@
   # for a cold one and overruns systemd's 90s DefaultTimeoutStartSec, which
   # kills start-pre and fails the unit. Give it headroom, and retry instead of
   # staying dead until somebody notices.
-  systemd.services.mealie.serviceConfig = {
-    TimeoutStartSec = "10min";
-    Restart = "on-failure";
-    RestartSec = "15s";
+  systemd.services = {
+    mealie.serviceConfig = {
+      TimeoutStartSec = "10min";
+      Restart = "on-failure";
+      RestartSec = "15s";
+    };
+
+    homepage-dashboard.environment.HOSTNAME = "127.0.0.1";
   };
 
   # Jellyfin only needs to *read* the library, so it joins "media" as a

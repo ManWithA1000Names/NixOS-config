@@ -294,6 +294,8 @@ in
       # Deliberately not a Requires -- if the proxy is dead, dnsmasq must still
       # come up to serve the o700.net zone and the "home" forwards.
       dnsmasq.after = [ "dnscrypt-proxy.service" ];
+
+      seerr.environment.HOST = "127.0.0.1";
     };
   };
 }

@@ -59,6 +59,7 @@ in
       backupDir = "${PATHS.BACKUP_ROOT}/warden";
       config = {
         ROCKET_PORT = PORTS.VAULTWARDEN;
+        ROCKET_ADDRESS = "127.0.0.1";
         SIGNUPS_ALLOWED = false;
       };
     };
