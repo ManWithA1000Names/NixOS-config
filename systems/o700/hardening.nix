@@ -64,6 +64,109 @@ let
       ProcSubset = if cfg.allProcesses then "all" else "pid";
     };
 
+  # Infrastructure, which has no seta entry -- caddy, dnsmasq, tinyproxy,
+  # dnscrypt-proxy and fail2ban are not "services" in seta's sense. An attrset
+  # rather than a list so the warning above can enumerate the same names that
+  # are configured here, instead of the two drifting apart.
+  #
+  # Each deviation from the baseline is a capability the service demonstrably
+  # needs, not a guess -- a bounding set that is one capability short fails at
+  # start, and four of these five are on the path used to fix it.
+  infraSandbox = {
+    # Binds :80 and :443 as User=caddy. Its two ambient capabilities come from
+    # the unit file shipped inside the package, where
+    # config.systemd.services.caddy.serviceConfig cannot see them -- and
+    # AmbientCapabilities must be a subset of the bounding set, so naming
+    # them here is what keeps them. An empty set takes the site down.
+    #
+    # CAP_NET_ADMIN is kept because upstream ships it, not because anything
+    # in this configuration is known to need it. Dropping it is a plausible
+    # further step and a testable one; it is not a change to make blind on
+    # the service that terminates TLS for everything.
+    caddy = infraDefaults // {
+      capabilities = [
+        "CAP_NET_BIND_SERVICE"
+        "CAP_NET_ADMIN"
+      ];
+    };
+
+    # Runs as root and drops to --user=dnsmasq itself, which is why it needs
+    # the SET* capabilities that a service started under User= does not:
+    # systemd is not doing the transition, dnsmasq is.
+    #
+    # AF_NETLINK is not optional. dnsmasq enumerates interfaces and watches
+    # for address changes over a netlink socket, and without it the daemon
+    # starts and then cannot see the interface it is meant to answer on.
+    # This host is the LAN's only resolver and big-boss depends on it, so
+    # the failure would take name resolution down for the network from
+    # which it would have to be fixed.
+    dnsmasq = infraDefaults // {
+      capabilities = [
+        "CAP_NET_BIND_SERVICE"
+        "CAP_SETUID"
+        "CAP_SETGID"
+        "CAP_SETPCAP"
+        "CAP_NET_ADMIN"
+
+        # These two are for the ExecStartPre, not the daemon, and leaving
+        # them out is what broke DNS on 2026-09-11 with
+        #   touch: cannot touch '/var/lib/dnsmasq/dnsmasq.leases':
+        #   Permission denied
+        #
+        # The module's pre-start runs as root -- this unit has no User=,
+        # because dnsmasq drops to --user=dnsmasq itself -- and does
+        # `mkdir`, `touch` and `chown -R dnsmasq` on /var/lib/dnsmasq. That
+        # directory is owned by dnsmasq from the previous run, so root is
+        # "other" against a 0755 directory and its write is permitted only
+        # by CAP_DAC_OVERRIDE. Reproduced exactly, down to the error
+        # string, by running the same touch as a namespace root with this
+        # capability dropped.
+        #
+        # CAP_CHOWN covers the `chown -R`, which is a no-op in steady
+        # state (the uid already matches, and the kernel skips the check
+        # when ownership does not actually change) but is load-bearing on
+        # the path that matters most: a fresh /var/lib, where root creates
+        # the file and the ownership genuinely changes. That is the
+        # restore path.
+        "CAP_DAC_OVERRIDE"
+        "CAP_CHOWN"
+      ];
+      addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
+    };
+
+    # The cleanest case on the host: a small C daemon that binds an
+    # unprivileged loopback port as User=tinyproxy and needs no capability
+    # at all. It was also the worst-scoring service we actually control.
+    tinyproxy = infraDefaults;
+
+    # The module sets AmbientCapabilities=CAP_NET_BIND_SERVICE, and ambient
+    # must be a subset of the bounding set -- so even though this resolver
+    # listens on an unprivileged port here, naming the capability is what
+    # keeps the module's own setting from being silently voided.
+    dnscrypt-proxy = infraDefaults // {
+      capabilities = [ "CAP_NET_BIND_SERVICE" ];
+      addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
+    };
+
+    # The module already sets a bounding set (CAP_AUDIT_READ,
+    # CAP_DAC_READ_SEARCH, CAP_NET_ADMIN, CAP_NET_RAW) and ProtectSystem=strict,
+    # and those definitions beat mkOptionDefault, so the capability line
+    # here is inert by design -- restated only so this reads as a complete
+    # list rather than as an omission.
+    #
+    # AF_NETLINK is the one thing the module does not cover and fail2ban
+    # genuinely needs: banning is nftables, and nftables is netlink.
+    fail2ban = infraDefaults // {
+      capabilities = [
+        "CAP_AUDIT_READ"
+        "CAP_DAC_READ_SEARCH"
+        "CAP_NET_ADMIN"
+        "CAP_NET_RAW"
+      ];
+      addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
+    };
+  };
+
   # Defaults for a unit with no seta entry, so the infra list below reads as a
   # set of deviations from the baseline rather than restating it.
   infraDefaults = {
@@ -246,6 +349,59 @@ in
   # Applying the baseline
   # ---------------------------------------------------------------------------
 
+  # A unit that runs as root and has an empty CapabilityBoundingSet has lost
+  # root's DAC override, so every file operation it performs against something
+  # it does not own fails -- and fails as a plain "Permission denied" that looks
+  # like a broken path rather than like a capability problem. dnsmasq cost a DNS
+  # outage to learn this, because its pre-start runs as root, chowns its state
+  # directory to the dnsmasq user, and then has to write into it again next
+  # start.
+  #
+  # A warning rather than an assertion: a root unit that only touches root-owned
+  # files is genuinely fine with no capabilities, and refusing to build would be
+  # wrong for it. What is not fine is finding out at 11:09 on a Friday.
+  #
+  # Reads serviceConfig, so it sees User=/DynamicUser= however the module spells
+  # them -- including the modules that set DynamicUser as the string "true",
+  # which a plain `== true` would miss.
+  warnings =
+    let
+      runsAsRoot =
+        unit:
+        let
+          sc = config.systemd.services.${unit}.serviceConfig or { };
+          dynamic = sc.DynamicUser or false;
+        in
+        !(sc ? User) && dynamic != true && dynamic != "true" && dynamic != "yes";
+
+      unprivileged =
+        unit: (config.systemd.services.${unit}.serviceConfig.CapabilityBoundingSet or null) == [ ];
+
+      candidates = lib.unique (
+        (builtins.concatMap (m: m.units) (
+          builtins.filter (m: m.sandbox.enable) (builtins.attrValues config.seta)
+        ))
+        ++ builtins.attrNames infraSandbox
+      );
+
+      exposed = builtins.filter (
+        u: (config.systemd.services ? ${u}) && runsAsRoot u && unprivileged u
+      ) candidates;
+    in
+    lib.optional (exposed != [ ]) ''
+      These units run as root under the sandboxing baseline with an empty CapabilityBoundingSet:
+
+        ${lib.concatStringsSep "\n  " exposed}
+
+      Root without CAP_DAC_OVERRIDE cannot write to a file or directory it does not own, and
+      root without CAP_CHOWN cannot hand one to a service user. Both surface as "Permission
+      denied" from the unit's own ExecStartPre, which reads like a wrong path.
+
+      Check what each unit does before it drops privileges -- a pre-start that creates or
+      chowns a state directory is the usual case -- and name the capabilities it needs in
+      seta.<svc>.sandbox.capabilities, or in the infra list in this file.
+    '';
+
   systemd.services = lib.mkMerge (
     # Every seta service that has not opted out.
     (map (
@@ -255,102 +411,7 @@ in
       })
     ) (builtins.filter (meta: meta.sandbox.enable) (builtins.attrValues config.seta)))
 
-    # Infrastructure, which has no seta entry. Each deviation from the baseline
-    # is a capability the service demonstrably needs, not a guess -- a bounding
-    # set that is one capability short fails at start, and three of these four
-    # are on the path that would be used to fix it.
-    ++ [
-      {
-        # Binds :80 and :443 as User=caddy. The two ambient capabilities come
-        # from the unit file shipped inside the package, where
-        # config.systemd.services.caddy.serviceConfig cannot see them -- and
-        # AmbientCapabilities must be a subset of the bounding set, so naming
-        # them here is what keeps them. An empty set takes the site down.
-        #
-        # CAP_NET_ADMIN is kept because upstream ships it, not because anything
-        # in this configuration is known to need it. Dropping it is a plausible
-        # further step and a testable one; it is not a change to make blind on
-        # the service that terminates TLS for everything.
-        caddy.serviceConfig = sandboxBaseline (
-          infraDefaults
-          // {
-            capabilities = [
-              "CAP_NET_BIND_SERVICE"
-              "CAP_NET_ADMIN"
-            ];
-          }
-        );
-      }
-
-      {
-        # Runs as root and drops to --user=dnsmasq itself, which is why it needs
-        # the SET* capabilities that a service started under User= does not:
-        # systemd is not doing the transition, dnsmasq is.
-        #
-        # AF_NETLINK is not optional. dnsmasq enumerates interfaces and watches
-        # for address changes over a netlink socket, and without it the daemon
-        # starts and then cannot see the interface it is meant to answer on.
-        # This host is the LAN's only resolver and big-boss depends on it, so
-        # the failure would take name resolution down for the network from
-        # which it would have to be fixed.
-        dnsmasq.serviceConfig = sandboxBaseline (
-          infraDefaults
-          // {
-            capabilities = [
-              "CAP_NET_BIND_SERVICE"
-              "CAP_SETUID"
-              "CAP_SETGID"
-              "CAP_SETPCAP"
-              "CAP_NET_ADMIN"
-            ];
-            addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
-          }
-        );
-      }
-
-      {
-        # The cleanest case on the host: a small C daemon that binds an
-        # unprivileged loopback port as User=tinyproxy and needs no capability
-        # at all. It was also the worst-scoring service we actually control.
-        tinyproxy.serviceConfig = sandboxBaseline infraDefaults;
-      }
-
-      {
-        # The module sets AmbientCapabilities=CAP_NET_BIND_SERVICE, and ambient
-        # must be a subset of the bounding set -- so even though this resolver
-        # listens on an unprivileged port here, naming the capability is what
-        # keeps the module's own setting from being silently voided.
-        dnscrypt-proxy.serviceConfig = sandboxBaseline (
-          infraDefaults
-          // {
-            capabilities = [ "CAP_NET_BIND_SERVICE" ];
-            addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
-          }
-        );
-      }
-
-      {
-        # The module already sets a bounding set (CAP_AUDIT_READ,
-        # CAP_DAC_READ_SEARCH, CAP_NET_ADMIN, CAP_NET_RAW) and ProtectSystem=strict,
-        # and those definitions beat mkOptionDefault, so the capability line
-        # here is inert by design -- restated only so this reads as a complete
-        # list rather than as an omission.
-        #
-        # AF_NETLINK is the one thing the module does not cover and fail2ban
-        # genuinely needs: banning is nftables, and nftables is netlink.
-        fail2ban.serviceConfig = sandboxBaseline (
-          infraDefaults
-          // {
-            capabilities = [
-              "CAP_AUDIT_READ"
-              "CAP_DAC_READ_SEARCH"
-              "CAP_NET_ADMIN"
-              "CAP_NET_RAW"
-            ];
-            addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
-          }
-        );
-      }
-    ]
+    # And the infrastructure units, which have no seta entry to carry it.
+    ++ (lib.mapAttrsToList (unit: cfg: { ${unit}.serviceConfig = sandboxBaseline cfg; }) infraSandbox)
   );
 }

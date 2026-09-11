@@ -570,6 +570,23 @@
     };
 
     opencloud = {
+      # opencloud-init-config runs as root and ends with
+      #   chown opencloud:opencloud /etc/opencloud/opencloud.yaml
+      # which needs CAP_CHOWN. The sandboxing baseline would otherwise leave
+      # this oneshot as root with no capabilities at all.
+      #
+      # The whole block is guarded by `if [ ! -e "$config" ]`, so on a host that
+      # is already provisioned nothing runs and nothing fails. It would have
+      # broken only on a fresh install or a restore -- which is to say, the one
+      # occasion when a silent failure costs the most. Caught by the warning in
+      # systems/o700/hardening.nix rather than by anything going wrong here.
+      #
+      # Applies to both units in `units` below; opencloud.service itself runs as
+      # User=opencloud and does not need it, but a capability in the bounding
+      # set is a ceiling rather than a grant, and splitting the two would mean
+      # per-unit sandbox settings for one line of benefit.
+      sandbox.capabilities = [ "CAP_CHOWN" ];
+
       # The module ships a second unit. opencloud-init-config is a oneshot,
       # ordered before opencloud.service, that runs `opencloud init` to
       # generate /etc/opencloud/opencloud.yaml when it is absent -- that file
