@@ -1,0 +1,166 @@
+{ lib, ... }:
+{
+  # ---------------------------------------------------------------------------
+  # Kernel-level hardening
+  #
+  # Everything here is the part of the old `profiles/hardened.nix` that was
+  # worth keeping, applied one option at a time instead of as a bundle. That
+  # profile no longer exists: in this channel it is a mkRemovedOptionModule stub
+  # and the 26.05 release notes give the reason -- "more of a grab bag of
+  # settings than a cohesive security policy", with breakage and performance
+  # costs that are not obvious from the import line. So is `linux_hardened`,
+  # removed in the same release for lack of maintenance.
+  #
+  # The selection rule used here: take the settings whose cost is zero on a
+  # headless single-tenant server, and leave the ones that trade real capability
+  # for defence against attackers who already have local code execution. What
+  # was deliberately NOT taken, and why:
+  #
+  #   security.lockKernelModules -- blocks module loading after boot. The
+  #     external SSD is removable (see fileSystems below), so a drive plugged in
+  #     after boot needs its storage path loaded then, and nftables lazy-loads
+  #     netfilter modules on ruleset changes. Both fail weeks later, at hotplug
+  #     or at the next rebuild, rather than at switch time.
+  #
+  #   security.allowSimultaneousMultithreading = false -- halves the CPU of a
+  #     single-socket home server to defend against cross-thread side channels,
+  #     which require local code execution to exploit. At that point there are
+  #     larger problems.
+  #
+  #   kernel.unprivileged_userns_clone = 0 -- a Debian patch rather than a
+  #     mainline sysctl; NixOS exposes security.unprivilegedUsernsClone for it.
+  #     Turning it off breaks things subtly and buys nothing here.
+  #
+  #   security.forcePageTableIsolation -- already the kernel default on CPUs
+  #     that need it.
+  # ---------------------------------------------------------------------------
+
+  # Blocks kexec, so the running kernel image cannot be replaced without a
+  # reboot, and adds `nohibernate` -- hibernation is the other way to swap the
+  # running kernel. Neither is a capability this host uses: swapDevices is
+  # empty (see hardware-configuration.nix) so it could not hibernate anyway.
+  security.protectKernelImage = true;
+
+  # A core dump of vaultwarden, postgres or odoo contains every secret those
+  # processes hold in memory, and lands on the root spindle -- the disk whose
+  # I/O contention has taken this host down twice. Both halves of that are
+  # reasons not to write them.
+  systemd.coredump.enable = false;
+
+  boot.kernel.sysctl = {
+    # --- Network -------------------------------------------------------------
+    #
+    # Reverse-path filtering is deliberately NOT set here.
+    # networking.firewall.checkReversePath installs an nftables rpfilter chain
+    # instead, and setting the sysctl as well applies two independent filters
+    # with different semantics to the same packets.
+    #
+    # This host has a globally routable IPv6 address on the same NIC as the LAN
+    # (see the extraInputRules comment in networking.nix), so the v6 halves of
+    # these are not theoretical.
+
+    # ICMP redirects let an off-path peer rewrite this host's routing table.
+    "net.ipv4.conf.all.accept_redirects" = 0;
+    "net.ipv4.conf.default.accept_redirects" = 0;
+    "net.ipv4.conf.all.secure_redirects" = 0;
+    "net.ipv6.conf.all.accept_redirects" = 0;
+    "net.ipv6.conf.default.accept_redirects" = 0;
+
+    # Source routing lets the sender pick the return path, which defeats every
+    # source-address check in the firewall -- including the `ip saddr` scoping
+    # that is the only thing keeping sshd and dnsmasq off the v6 internet.
+    "net.ipv4.conf.all.accept_source_route" = 0;
+    "net.ipv6.conf.all.accept_source_route" = 0;
+
+    # Not a router. Sending redirects is only meaningful for one.
+    "net.ipv4.conf.all.send_redirects" = 0;
+    "net.ipv4.conf.default.send_redirects" = 0;
+
+    "net.ipv4.icmp_echo_ignore_broadcasts" = 1;
+    "net.ipv4.tcp_syncookies" = 1;
+
+    # net.ipv6.conf.*.accept_ra is untouched on purpose: this host takes its
+    # global IPv6 address from router advertisements (see ipv6AcceptRAConfig in
+    # networking.nix). Setting it to 0 removes the address.
+
+    # --- Kernel --------------------------------------------------------------
+
+    # Raised from the NixOS default of 1. At 2, /proc and dmesg hide kernel
+    # pointers from every user including root -- which is what an exploit needs
+    # in order to defeat KASLR once it has a foothold.
+    "kernel.kptr_restrict" = 2;
+    "kernel.dmesg_restrict" = 1;
+
+    # 1 = a process may only ptrace its own descendants. This is the one that
+    # matters most on this host: without it, any process running as a given
+    # service's user can read that service's memory, and every secret agenix
+    # delivers ends up there. 2 and 3 are stricter but break debugging.
+    "kernel.yama.ptrace_scope" = 1;
+
+    # Neither affects root-loaded programs, so netdata's ebpf plugin and
+    # systemd's IPAddressDeny filters (which every seta service uses) keep
+    # working. bpf_jit_harden blinds constants in JITed programs, which is a
+    # throughput cost on that fast path -- worth watching on this hardware, and
+    # the first thing to drop if BPF shows up as a cost.
+    "kernel.unprivileged_bpf_disabled" = 1;
+    "net.core.bpf_jit_harden" = 2;
+
+    # --- Filesystem ----------------------------------------------------------
+    #
+    # All four close the classic symlink/hardlink/FIFO races in world-writable
+    # directories -- which on this host means /tmp, now that it is cleaned on
+    # boot rather than accumulating forever.
+    "fs.protected_hardlinks" = 1;
+    "fs.protected_symlinks" = 1;
+    "fs.protected_fifos" = 2;
+    "fs.protected_regular" = 2;
+
+    "vm.unprivileged_userfaultfd" = 0;
+  };
+
+  # Four protocol stacks with a long CVE history that nothing on this host
+  # speaks, plus filesystems nothing here mounts. Each one is an autoloadable
+  # module, which means a single unprivileged socket() call is enough to pull
+  # its parser into the kernel.
+  #
+  # NOT blacklisted, deliberately:
+  #
+  #   usb_storage -- /mnt/ex-ssd is removable, and it carries the restic
+  #     repository, every backup and the whole media library. Blacklisting this
+  #     is lynis USB-1000's suggestion and it would silently take all of that
+  #     away at the next boot: `nofail` means the machine comes up looking
+  #     healthy while requiresExSSD refuses to start half the stack.
+  #
+  #   squashfs -- how any AppImage or mounted ISO works. Fails at mount time,
+  #     long after the decision, rather than at eval time.
+  boot.blacklistedKernelModules = [
+    "dccp"
+    "sctp"
+    "rds"
+    "tipc"
+    "cramfs"
+    "freevxfs"
+    "jffs2"
+    "hfs"
+    "hfsplus"
+    "udf"
+  ];
+
+  # /tmp is on the root filesystem and nothing has ever cleared it. Not tmpfs:
+  # that trades disk for RAM on a host with neither to spare and no swap to
+  # fall back on (swapDevices is empty and must stay that way).
+  boot.tmp.cleanOnBoot = true;
+
+  # lynis NAME-4028. The host has a hostName but no domain, so `hostname -d`
+  # answers nothing and the FQDN is just "o700" -- on the machine that is
+  # authoritative for this zone.
+  networking.domain = "o700.net";
+
+  # lynis HRDN-7222. The NixOS default set drops perl, rsync, strace and nano
+  # into the system PATH of a WAN-facing host for no function this
+  # configuration uses. gcc/gnumake/python3 are handled separately, by keeping
+  # them out of systems/common/programs.nix -- closures are built on big-boss
+  # and pushed (see the justfile), and Nix builds use the store's toolchain
+  # rather than environment.systemPackages, so nothing here needs to compile.
+  environment.defaultPackages = lib.mkForce [ ];
+}
