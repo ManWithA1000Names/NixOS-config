@@ -158,6 +158,40 @@
                     ];
                     description = "The hardening, scrutiny and exposure level that should be applied to this service.";
                   };
+
+                  wanPaths = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [ ];
+                    example = [ "/webhook/*" ];
+                    description = ''
+                      Request paths that bypass the exposure guard, reachable
+                      from anywhere regardless of `exposure`.
+
+                      For an application where one endpoint has to accept calls
+                      from third parties while the rest of it -- editor, admin
+                      UI, internal API -- should not. The alternative is
+                      exposure = "WAN" for the whole vhost, which is how n8n was
+                      configured before this existed: to let a webhook through,
+                      the workflow editor and its REST API were published too.
+
+                      Only meaningful with exposure = "LAN". With "WAN" there is
+                      no guard to poke a hole in, so entries here would be
+                      silently inert; with "NONE" the point of the level is that
+                      nothing reaches the service. Both are assertion errors
+                      rather than surprises -- see below.
+
+                      Matched with Caddy's `path` matcher, so `*` is a wildcard
+                      that spans `/`: "/webhook/*" covers /webhook/a/b/c. Write
+                      the separator explicitly. "/webhook*" without it also
+                      matches /webhook-test/*, which for n8n is the editor's
+                      "listen for test event" endpoint and has no business
+                      facing the internet. Matching is case-insensitive.
+
+                      These paths get no source check at all, so the
+                      application behind them is the entire access control.
+                      Everything here must be safe to hand an anonymous caller.
+                    '';
+                  };
                 };
               };
             };
@@ -436,18 +470,39 @@
   # A unit that legitimately has no ExecStart -- ExecStop-only, or a target --
   # would be a false positive. None exist here, and the fix would be to name a
   # real unit anyway.
-  config.assertions = lib.concatLists (
-    lib.mapAttrsToList (
-      svc: meta:
-      map (unit: {
-        assertion = (config.systemd.services.${unit} or null) ? serviceConfig.ExecStart;
-        message = ''
-          seta.${svc}.units names "${unit}", which is not a systemd service defined by this
-          configuration. Check what the upstream module actually calls its units and set
-          seta.${svc}.units explicitly -- leaving it at the default of [ "${svc}" ] silently
-          disables critical, requiresExSSD and networkConfinement for this service.
-        '';
-      }) meta.units
-    ) config.seta
-  );
+  config.assertions =
+    lib.concatLists (
+      lib.mapAttrsToList (
+        svc: meta:
+        map (unit: {
+          assertion = (config.systemd.services.${unit} or null) ? serviceConfig.ExecStart;
+          message = ''
+            seta.${svc}.units names "${unit}", which is not a systemd service defined by this
+            configuration. Check what the upstream module actually calls its units and set
+            seta.${svc}.units explicitly -- leaving it at the default of [ "${svc}" ] silently
+            disables requiresExSSD and networkConfinement for this service.
+          '';
+        }) meta.units
+      ) config.seta
+    )
+
+    # proxy.wanPaths only means anything where there is a guard to punch
+    # through. vhostSources.WAN is the empty list, so with exposure = "WAN" the
+    # guard is not emitted at all and every entry here would be accepted,
+    # formatted into nothing, and quietly do exactly nothing -- the silent
+    # no-op this file exists to keep catching. With "NONE" it would work, and
+    # that is the problem: it would publish part of a service whose declared
+    # level is that nothing reaches it.
+    ++ (lib.mapAttrsToList (svc: meta: {
+      assertion = meta.proxy.wanPaths == [ ] || meta.proxy.exposure == "LAN";
+      message = ''
+        seta.${svc}.proxy.wanPaths is set alongside exposure = "${meta.proxy.exposure}", and it
+        only has an effect with exposure = "LAN".
+
+        With "WAN" the vhost has no exposure guard, so these paths are already reachable from
+        anywhere and the setting would silently do nothing. With "NONE" the whole point of the
+        level is that the service is not reachable; publishing part of it needs a different
+        level, stated deliberately.
+      '';
+    }) config.seta);
 }

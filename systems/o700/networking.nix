@@ -153,8 +153,27 @@ let
       # position in Caddy's directive order and the two must fire as one unit.
       # Sibling to the handler below inside the same `route`: a request that
       # does not match @blocked falls through to it unchanged.
+      # Block form rather than the one-line `@blocked not remote_ip ...`,
+      # because proxy.wanPaths adds a second condition. Caddy compiles the two
+      # `not` lines into a single `not` matcher holding two matcher sets, and
+      # MatchNot returns true only when *none* of them match -- so this reads
+      # "blocked when the source is not permitted AND the path is not one of
+      # the exempt ones", which is the wanted meaning rather than its inverse.
+      # Verified against caddy 2.11.4 by adapting the Caddyfile and by serving
+      # it: with the allowed range excluding the client, /webhook/a/b/c passes
+      # while /, /rest/login, /webhook-test/abc and /webhookabc are all
+      # refused.
+      #
+      # wanPaths is listed second on purpose. The source check is the rule and
+      # the paths are the exception, and reading it in that order is what makes
+      # the exception obvious to anyone auditing this vhost later.
       guard = lib.optionalString (sources != [ ]) ''
-        @blocked not remote_ip ${lib.concatStringsSep " " sources}
+        @blocked {
+          not remote_ip ${lib.concatStringsSep " " sources}
+          ${lib.optionalString (
+            proxy.wanPaths != [ ]
+          ) "not path ${lib.concatStringsSep " " proxy.wanPaths}"}
+        }
         handle @blocked {
           log_append ban_reason "exposure-guard"
           respond 404
