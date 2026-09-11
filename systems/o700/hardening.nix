@@ -1,4 +1,82 @@
-{ lib, ... }:
+{ config, lib, ... }:
+let
+  # The systemd sandboxing baseline, in one place, applied to two populations:
+  # the units reached through seta.<svc>.sandbox, and the infrastructure units
+  # below that have no seta entry at all. seta is keyed by *service*, and caddy,
+  # dnsmasq, tinyproxy and fail2ban are not services in that sense -- the same
+  # split monitoring/notify.nix draws, for the same reason.
+  #
+  # Every value is mkOptionDefault (priority 1500, the same priority an option's
+  # own `default` carries), so any module that states a value wins outright.
+  # This can therefore only fill gaps, never contradict a module that already
+  # thought about the question -- which is what makes it safe to apply to
+  # paperless at 0.9 as well as to tinyproxy at 9.2.
+  #
+  # Deliberately absent from the baseline, each for a concrete reason:
+  #
+  #   ProtectSystem   Several modules here already set "strict" and the rest
+  #                   differ in where they write. A blanket value would either
+  #                   be too weak to matter or turn a write outside
+  #                   StateDirectory into a startup failure, and which services
+  #                   do that cannot be established from the module source
+  #                   alone.
+  #
+  #   UMask=0077      The media stack shares files through MEDIA_GROUP --
+  #                   qBittorrent writes what Sonarr hardlinks and Jellyfin
+  #                   reads. Making every new file group-unreadable breaks that
+  #                   chain, for 0.1 of score.
+  #
+  #   MemoryDenyWriteExecute
+  #                   Breaks every JIT on the host: n8n, seerr and
+  #                   homepage-dashboard are Node, kavita and jellyfin are .NET.
+  #                   It is worth having for the non-JIT services and should be
+  #                   added per-service, after checking, rather than centrally.
+  sandboxBaseline =
+    cfg:
+    lib.mapAttrs (_: lib.mkOptionDefault) {
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      ProtectHome = true;
+      ProtectClock = true;
+      ProtectHostname = true;
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectKernelLogs = true;
+      ProtectControlGroups = true;
+      RestrictNamespaces = true;
+      RestrictRealtime = true;
+      RestrictSUIDSGID = true;
+      LockPersonality = true;
+      SystemCallArchitectures = "native";
+
+      RestrictAddressFamilies = cfg.addressFamilies;
+      CapabilityBoundingSet = cfg.capabilities;
+      SystemCallFilter = cfg.systemCalls;
+
+      # EPERM rather than the default SIGSYS: a filter that turns out to be one
+      # syscall too tight then surfaces as a handled error inside the service
+      # instead of as an unexplained kill, which is the difference between a
+      # log line naming the call and a crash loop naming nothing.
+      SystemCallErrorNumber = "EPERM";
+
+      ProtectProc = if cfg.allProcesses then "default" else "invisible";
+      ProcSubset = if cfg.allProcesses then "all" else "pid";
+    };
+
+  # Defaults for a unit with no seta entry, so the infra list below reads as a
+  # set of deviations from the baseline rather than restating it.
+  infraDefaults = {
+    capabilities = [ ];
+    addressFamilies = [
+      "AF_UNIX"
+      "AF_INET"
+      "AF_INET6"
+    ];
+    systemCalls = [ "@system-service" ];
+    allProcesses = false;
+  };
+in
 {
   # ---------------------------------------------------------------------------
   # Kernel-level hardening
@@ -163,4 +241,116 @@
   # and pushed (see the justfile), and Nix builds use the store's toolchain
   # rather than environment.systemPackages, so nothing here needs to compile.
   environment.defaultPackages = lib.mkForce [ ];
+
+  # ---------------------------------------------------------------------------
+  # Applying the baseline
+  # ---------------------------------------------------------------------------
+
+  systemd.services = lib.mkMerge (
+    # Every seta service that has not opted out.
+    (map (
+      meta:
+      lib.genAttrs meta.units (_: {
+        serviceConfig = sandboxBaseline meta.sandbox;
+      })
+    ) (builtins.filter (meta: meta.sandbox.enable) (builtins.attrValues config.seta)))
+
+    # Infrastructure, which has no seta entry. Each deviation from the baseline
+    # is a capability the service demonstrably needs, not a guess -- a bounding
+    # set that is one capability short fails at start, and three of these four
+    # are on the path that would be used to fix it.
+    ++ [
+      {
+        # Binds :80 and :443 as User=caddy. The two ambient capabilities come
+        # from the unit file shipped inside the package, where
+        # config.systemd.services.caddy.serviceConfig cannot see them -- and
+        # AmbientCapabilities must be a subset of the bounding set, so naming
+        # them here is what keeps them. An empty set takes the site down.
+        #
+        # CAP_NET_ADMIN is kept because upstream ships it, not because anything
+        # in this configuration is known to need it. Dropping it is a plausible
+        # further step and a testable one; it is not a change to make blind on
+        # the service that terminates TLS for everything.
+        caddy.serviceConfig = sandboxBaseline (
+          infraDefaults
+          // {
+            capabilities = [
+              "CAP_NET_BIND_SERVICE"
+              "CAP_NET_ADMIN"
+            ];
+          }
+        );
+      }
+
+      {
+        # Runs as root and drops to --user=dnsmasq itself, which is why it needs
+        # the SET* capabilities that a service started under User= does not:
+        # systemd is not doing the transition, dnsmasq is.
+        #
+        # AF_NETLINK is not optional. dnsmasq enumerates interfaces and watches
+        # for address changes over a netlink socket, and without it the daemon
+        # starts and then cannot see the interface it is meant to answer on.
+        # This host is the LAN's only resolver and big-boss depends on it, so
+        # the failure would take name resolution down for the network from
+        # which it would have to be fixed.
+        dnsmasq.serviceConfig = sandboxBaseline (
+          infraDefaults
+          // {
+            capabilities = [
+              "CAP_NET_BIND_SERVICE"
+              "CAP_SETUID"
+              "CAP_SETGID"
+              "CAP_SETPCAP"
+              "CAP_NET_ADMIN"
+            ];
+            addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
+          }
+        );
+      }
+
+      {
+        # The cleanest case on the host: a small C daemon that binds an
+        # unprivileged loopback port as User=tinyproxy and needs no capability
+        # at all. It was also the worst-scoring service we actually control.
+        tinyproxy.serviceConfig = sandboxBaseline infraDefaults;
+      }
+
+      {
+        # The module sets AmbientCapabilities=CAP_NET_BIND_SERVICE, and ambient
+        # must be a subset of the bounding set -- so even though this resolver
+        # listens on an unprivileged port here, naming the capability is what
+        # keeps the module's own setting from being silently voided.
+        dnscrypt-proxy.serviceConfig = sandboxBaseline (
+          infraDefaults
+          // {
+            capabilities = [ "CAP_NET_BIND_SERVICE" ];
+            addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
+          }
+        );
+      }
+
+      {
+        # The module already sets a bounding set (CAP_AUDIT_READ,
+        # CAP_DAC_READ_SEARCH, CAP_NET_ADMIN, CAP_NET_RAW) and ProtectSystem=strict,
+        # and those definitions beat mkOptionDefault, so the capability line
+        # here is inert by design -- restated only so this reads as a complete
+        # list rather than as an omission.
+        #
+        # AF_NETLINK is the one thing the module does not cover and fail2ban
+        # genuinely needs: banning is nftables, and nftables is netlink.
+        fail2ban.serviceConfig = sandboxBaseline (
+          infraDefaults
+          // {
+            capabilities = [
+              "CAP_AUDIT_READ"
+              "CAP_DAC_READ_SEARCH"
+              "CAP_NET_ADMIN"
+              "CAP_NET_RAW"
+            ];
+            addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
+          }
+        );
+      }
+    ]
+  );
 }

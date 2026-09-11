@@ -250,6 +250,114 @@
               type = lib.types.bool;
             };
 
+            sandbox = lib.mkOption {
+              default = { };
+
+              description = ''
+                Apply the systemd sandboxing baseline to every unit in `units`.
+
+                `systemd-analyze security` scored fifteen services on this host
+                between 5.0 and 9.2, and the report was the same report fifteen
+                times: no CapabilityBoundingSet, no SystemCallFilter, no
+                ProtectProc, no ProcSubset, no RestrictAddressFamilies. The
+                services that already scored well did so because their nixpkgs
+                module happened to set those; the ones that scored badly had no
+                module opinion at all. That is one missing baseline repeated,
+                not fifteen separate problems.
+
+                Every setting is applied at mkOptionDefault priority, so a
+                module that states its own value always wins and this can only
+                fill gaps. That is what makes it safe to switch on for services
+                already scoring 0.9 -- it cannot regress them.
+
+                On by default, like networkConfinement and for the same reason:
+                a service that forgets to say anything gets the safe answer, and
+                the failure mode is a service that visibly will not start rather
+                than one silently running unconfined.
+              '';
+
+              type = lib.types.submodule {
+                options = {
+                  enable = lib.mkOption {
+                    type = lib.types.bool;
+                    default = true;
+                    description = "Apply the sandboxing baseline to this service's units.";
+                  };
+
+                  capabilities = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [ ];
+                    example = [ "CAP_NET_BIND_SERVICE" ];
+                    description = ''
+                      CapabilityBoundingSet for this service. Empty -- no
+                      capabilities at all -- is the default and is right for
+                      every service here that binds an unprivileged port and
+                      does not drop privileges itself.
+
+                      Getting this wrong is the most expensive mistake in this
+                      submodule, because the bounding set also caps
+                      AmbientCapabilities, and a unit shipped inside a package
+                      can set those where `config.systemd.services.<n>` cannot
+                      see them. caddy is exactly that case: its package unit
+                      carries AmbientCapabilities=CAP_NET_ADMIN
+                      CAP_NET_BIND_SERVICE, which an empty bounding set here
+                      would silently strip, leaving it unable to bind :443.
+                    '';
+                  };
+
+                  addressFamilies = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [
+                      "AF_UNIX"
+                      "AF_INET"
+                      "AF_INET6"
+                    ];
+                    description = ''
+                      RestrictAddressFamilies. The default covers a service that
+                      speaks TCP/UDP and talks to local sockets, which is all of
+                      them here.
+
+                      AF_NETLINK is the omission that matters: anything that
+                      enumerates interfaces or manipulates the firewall needs it
+                      and must say so.
+                    '';
+                  };
+
+                  systemCalls = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [ "@system-service" ];
+                    description = ''
+                      SystemCallFilter. `@system-service` is systemd's own
+                      allow-list for ordinary long-running daemons and is what
+                      the 156 SystemCallFilter findings across this host were
+                      asking for.
+
+                      Paired with SystemCallErrorNumber=EPERM below rather than
+                      the default SIGSYS, so a call outside the set fails the
+                      syscall instead of killing the process -- a filter that is
+                      slightly too tight then shows up as a handled error in the
+                      service's own log rather than as an unexplained crash.
+                    '';
+                  };
+
+                  allProcesses = lib.mkOption {
+                    type = lib.types.bool;
+                    default = false;
+                    description = ''
+                      Leave /proc fully visible: ProtectProc=default and
+                      ProcSubset=all instead of invisible/pid.
+
+                      For monitoring only. netdata's whole job is reading other
+                      processes' /proc entries and the non-pid files under
+                      /proc/sys; the hardened values make it report an almost
+                      empty machine while continuing to look healthy, which is
+                      the worst failure mode available to a monitoring agent.
+                    '';
+                  };
+                };
+              };
+            };
+
             networkConfinement = lib.mkOption {
               default = { };
 

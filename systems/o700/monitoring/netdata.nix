@@ -399,7 +399,67 @@
   # ExecStart comes from nixpkgs rather than from this repo.
   systemd.services.netdata.onFailure = [ "telegram-notify@%n.service" ];
 
+  # See seta.netdata.sandbox below for why this one setting is stated outside
+  # it: ndsudo is a setuid wrapper, and NoNewPrivileges makes a setuid bit
+  # inert. The sandbox baseline sets it true at mkOptionDefault, so this
+  # ordinary definition wins.
+  systemd.services.netdata.serviceConfig.NoNewPrivileges = false;
+
   seta.netdata = {
+    # The one service that has to opt out of half the sandboxing baseline, and
+    # the reasons are its entire job rather than incidental.
+    #
+    # NOT disabled wholesale: the fifteen-odd settings it does not conflict with
+    # -- ProtectClock, ProtectKernelModules, LockPersonality, RestrictRealtime,
+    # RestrictNamespaces and the rest -- still apply and are still worth having
+    # on a process that reads everything on the host.
+    sandbox = {
+      # apps.plugin and cgroups.plugin read other processes' /proc entries, and
+      # the /proc/stat, /proc/meminfo, /proc/pressure files the C collectors are
+      # built on are exactly what ProcSubset=pid hides. Under the hardened
+      # values netdata keeps running and reports an almost empty machine, which
+      # is the worst failure available to a monitoring agent: no alarm fires,
+      # because the alarms have no data to fire on.
+      allProcesses = true;
+
+      # The module sets these thirteen itself (they beat mkOptionDefault), so
+      # this is restated rather than load-bearing -- but an empty list here
+      # would read as "netdata needs no capabilities", which is the opposite of
+      # true, and the next person to touch the module's own definition would
+      # have no hint that the question was considered.
+      capabilities = [
+        "CAP_DAC_OVERRIDE"
+        "CAP_DAC_READ_SEARCH"
+        "CAP_NET_RAW"
+        "CAP_PERFMON"
+        "CAP_SETPCAP"
+        "CAP_SETUID"
+        "CAP_SYSLOG"
+        "CAP_SYS_ADMIN"
+        "CAP_SYS_CHROOT"
+        "CAP_SYS_PTRACE"
+        "CAP_SYS_RESOURCE"
+        "CAP_FOWNER"
+        "CAP_SYS_RAWIO"
+      ];
+
+      # ndsudo is a setuid wrapper (withNdsudo above, and the security.wrappers
+      # entry the module creates for it). NoNewPrivileges=true makes the setuid
+      # bit a no-op, so the fail2ban collector would lose its only route to the
+      # socket -- silently, since it already fails quietly when it cannot reach
+      # it. The baseline sets NoNewPrivileges at mkOptionDefault, so this
+      # explicit false wins.
+      #
+      # AF_NETLINK because netdata's network collectors read interface and
+      # socket state over netlink.
+      addressFamilies = [
+        "AF_UNIX"
+        "AF_INET"
+        "AF_INET6"
+        "AF_NETLINK"
+      ];
+    };
+
     # Confined by default like every other seta service, and the two things
     # that could have broken both survive:
     #
