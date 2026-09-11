@@ -59,6 +59,24 @@
       options = [
         "nofail"
         "x-systemd.device-timeout=10s"
+
+        # A removable filesystem holding the media library, qBittorrent's
+        # download target and the restic repository. Nothing on it is ever
+        # meant to be executed, own a device node, or carry a setuid bit --
+        # and qBittorrent writes to it from the network, which makes it the
+        # one mount here where that matters most.
+        #
+        # "nosuid" in particular is the only thing covering this filesystem at
+        # all: host-audit's SUID walk uses -xdev and has never looked here.
+        #
+        # If a Sonarr/Radarr post-processing script or a qBittorrent
+        # "run on completion" hook ever stops working, "noexec" is the cause
+        # and dropping that one line is the fix -- those scripts live in the
+        # application databases, so nothing in this repo can tell in advance
+        # whether any exist.
+        "nosuid"
+        "nodev"
+        "noexec"
       ];
     };
   };

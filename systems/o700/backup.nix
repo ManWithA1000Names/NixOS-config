@@ -1038,6 +1038,20 @@ in
   systemd.services.o700-backup = {
     description = "Nightly backup of every service on this host";
 
+    # Reports by failing. The orchestrator counts failed sets rather than
+    # aborting on the first, then exits with that count -- so the notifier's
+    # journal excerpt is the message "three services did not get backed up
+    # tonight, here is which", and netdata's unit-state alarm could only say
+    # that o700-backup failed.
+    #
+    # The per-set restic-backups-* units deliberately do NOT carry this. They
+    # are started by this orchestrator and their failures are already counted
+    # and named here; wiring them too would send two messages for one incident,
+    # and this is the one that says which set. They are excluded from netdata's
+    # template for the same reason -- see the chart labels matcher in
+    # monitoring/netdata.nix.
+    onFailure = [ "telegram-notify@%n.service" ];
+
     serviceConfig = {
       Type = "oneshot";
       ExecStart = lib.getExe orchestratorScript;
@@ -1073,6 +1087,13 @@ in
   systemd.services.o700-backup-offsite = lib.mkIf offsiteEnabled {
     description = "Copy new snapshots to the offsite repository";
 
+    # Inside the same mkIf that creates the unit, which is the point of wiring
+    # this here instead of in a list elsewhere. monitoring/notify.nix used to
+    # name this unit unconditionally while backup.nix generated it only when a
+    # bucket was configured -- so with no bucket, systemd synthesised an empty
+    # unit carrying nothing but an OnFailure. The condition is now stated once.
+    onFailure = [ "telegram-notify@%n.service" ];
+
     # The upload keeps the standard proxy variables, so it egresses through
     # tinyproxy like everything else on this host. CONNECT to 443 is permitted
     # and the filter is a blocklist, so nothing has to be opened for it; the
@@ -1098,6 +1119,11 @@ in
   # times for no benefit.
   systemd.services.o700-backup-prune = {
     description = "Apply retention and verify the backup repositories";
+
+    # `restic check` is the half that matters here: it reports repository
+    # corruption, and the finding is the list of damaged packs on stdout rather
+    # than the bare fact that the unit exited non-zero.
+    onFailure = [ "telegram-notify@%n.service" ];
 
     serviceConfig = {
       Type = "oneshot";

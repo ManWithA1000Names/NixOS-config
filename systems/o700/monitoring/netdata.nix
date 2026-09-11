@@ -301,6 +301,62 @@
             update_every: 60
       '';
 
+      # The stock systemd-unit alarm, enabled. Upstream ships it *disabled* in
+      # a way that is easy to miss: health.d/systemdunits.conf sets
+      # `chart labels: unit_name=!*`, a negative matcher that matches no unit,
+      # so the template never instantiates against any chart. The collector
+      # behind it needs nothing -- go.d.conf has `systemdunits: yes` as its
+      # default and go.d/systemdunits.conf ships an active `service-units` job
+      # including '*.service'.
+      #
+      # This is what replaces the hand-maintained OnFailure= list that used to
+      # live in monitoring/notify.nix. That list named 28 units; this covers
+      # every service unit in the configuration -- 109 declared here plus the
+      # package-provided ones -- so failures of agenix, postgresql-setup,
+      # acme-*, logrotate and systemd-tmpfiles-* now report where previously
+      # they fired nothing at all. Four units stay on the OnFailure path for
+      # reasons this template cannot serve; see notify.nix.
+      #
+      # Replacing the file is the only mechanism available: a same-named file
+      # in the user config dir shadows the stock one wholesale rather than
+      # merging with it. Nothing is lost by that -- the other nine templates in
+      # the stock file (socket, timer, target, mount, swap, scope, slice, path,
+      # device) are disabled by the same matcher, and none is wanted here.
+      #
+      # `to: sysadmin` routes to Telegram with no extra wiring:
+      # role_recipients_telegram[sysadmin] is commented out in the stock
+      # health_alarm_notify.conf, which means it falls back to
+      # DEFAULT_RECIPIENT_TELEGRAM -- set in the override just below.
+      #
+      # Cost, stated because it is not free: the collector charts every service
+      # unit, so this adds roughly a hundred charts against the 2GiB tier 0
+      # budget in [db] above. That is paid in retention, not in disk growth --
+      # dbengine still evicts oldest-first to stay under the cap. Measure
+      # before narrowing, and if it does bite, narrow the collector's
+      # `include:` rather than this matcher, so the alarm keeps covering
+      # whatever is still collected.
+      #
+      # restic-backups-* is excluded because o700-backup already counts failed
+      # sets and reports them with the set name attached. Without the
+      # exclusion one bad night sends two messages, and the orchestrator's is
+      # the one that says which set failed.
+      "health.d/systemdunits.conf" = pkgs.writeText "systemdunits.conf" ''
+            template: systemd_service_unit_failed_state
+                  on: systemd.service_unit_state
+               class: Errors
+                type: Linux
+           component: Systemd units
+        chart labels: unit_name=!restic-backups-* *
+                calc: $failed
+               units: state
+               every: 10s
+                warn: $this != nan AND $this == 1
+               delay: down 5m multiplier 1.5 max 1h
+             summary: systemd unit ''${label:unit_name} state
+                info: systemd service unit in the failed state
+                  to: sysadmin
+      '';
+
       # alarm-notify.sh sources the stock health_alarm_notify.conf first and
       # this one second, so only the overridden keys need to appear here; every
       # other notification method keeps its stock (disabled) default.
@@ -323,6 +379,25 @@
   # +-----------------------------------------------------------------+
   # | Additional configurations that are required for these services. |
   # +-----------------------------------------------------------------+
+
+  # The one failure netdata cannot report: its own. Every other service on this
+  # host now reaches Telegram through the systemd_service_unit_failed_state
+  # template configured above, and a dead agent evaluates no templates -- so
+  # without this, a crashed netdata and a quiet night are the same observation.
+  #
+  # This path deliberately does not share netdata's delivery route. The
+  # notifier runs with no_proxy set (monitoring/notify.nix), while netdata's
+  # own alerts are curl inheriting systemd.globalEnvironment and are confined
+  # to localhost and the LAN by the seta block below -- meaning api.telegram.org
+  # is reachable from netdata *only* through tinyproxy. Anything whose failure
+  # could also be the proxy's failure has to report some other way, and this is
+  # the other way.
+  #
+  # Wired here rather than in a central list because there is no central list
+  # any more: each unit that needs the notifier says so on its own definition.
+  # The assertions in monitoring/notify.nix check the ones, like this, whose
+  # ExecStart comes from nixpkgs rather than from this repo.
+  systemd.services.netdata.onFailure = [ "telegram-notify@%n.service" ];
 
   seta.netdata = {
     # Confined by default like every other seta service, and the two things

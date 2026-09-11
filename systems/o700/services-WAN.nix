@@ -353,8 +353,6 @@ in
 
   seta = {
     odoo = {
-      critical = true;
-
       # The Odoo NixOS module declares its own ensureDatabases/ensureUsers.
       # postgres = true here adds "odoo" to the central pg_dump backup run —
       # belt-and-suspenders; the duplicated CREATE-if-not-exists is harmless.
@@ -473,8 +471,6 @@ in
       # The backup directory lives on external ssd.
       requiresExSSD = true;
 
-      critical = true;
-
       # backup-vaultwarden is the module's own nightly sqlite dump. It was
       # never named here, so it had been running with none of the three things
       # this list drives: no RequiresMountsFor, so it wrote to the bare
@@ -553,8 +549,6 @@ in
       # subprocesses that ignore HTTP_PROXY entirely, so there is no route for them.
       # https:// mirrors are fine. Clone-over-SSH *into* gitea is unaffected -- that
       # is the host's sshd, which has no seta entry and is not confined.
-
-      critical = true;
 
       postgres = true;
 
@@ -654,8 +648,6 @@ in
     };
 
     n8n = {
-      critical = true;
-
       # Puts n8n in the central pg_dump manifest. Worth stating what that will
       # and will not recover: n8n encrypts every stored credential with a key
       # it generates on first start into /var/lib/n8n/.n8n/config, which is not
@@ -750,8 +742,10 @@ in
   # `after` only, never `requires`. The module already sets Restart=on-failure,
   # so a database that is down is a reason for n8n to retry; making it a
   # dependency would instead take n8n out of the unit graph and, because
-  # seta.n8n.critical wires OnFailure to the notifier, turn every postgres
-  # blip into a page.
+  # netdata's systemd_service_unit_failed_state template now alerts on every
+  # service unit that enters the failed state, turn every postgres blip into a
+  # page. That alarm is wider than the OnFailure list it replaced, so this
+  # reasoning binds harder than it did, not less.
   #
   # This is a list option, so it concatenates with the module's own `after`
   # rather than conflicting with it.

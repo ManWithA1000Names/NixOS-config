@@ -291,14 +291,19 @@ in
 
       # Reachable from the internet by design.
       allowedTCPPorts = [
-        # MUST be in the very first switch that enables this firewall, otherwise
-        # the switch locks you out of the only remote administration path.
-        PORTS.SSHD
+        # PORTS.SSHD is NOT here -- it is source-scoped in extraInputRules
+        # below. An entry in this list has no source restriction on either
+        # address family, and enp4s0 carries a globally routable IPv6 the
+        # router does not NAT, so listing sshd here published this host's only
+        # administration path to the internet with the router's default-deny as
+        # the single layer in front of it.
+
         # Caddy HTTP→HTTPS redirect. ACME uses DNS-01 so port 80 is not needed
         # for certificate issuance, but without it every http:// link to this
         # host times out instead of redirecting gracefully.
         PORTS.CADDY_HTTP
         PORTS.CADDY_HTTPS
+
         # BitTorrent. Inbound connections are how this peer is reachable by
         # anyone not already connected to it; without the port open qBittorrent
         # still works but only via outbound connections, which caps peer counts
@@ -309,12 +314,13 @@ in
         PORTS.QBITTORRENT_TORRENT
       ];
 
-      # Caddy enables HTTP/3 by default and advertises it via Alt-Svc. Without
-      # UDP/443, browsers accept the advertisement, fail QUIC, then fall back to
-      # TCP -- a per-connection stall that shows up as elevated probe_duration_seconds
-      # rather than as a visible error.
       allowedUDPPorts = [
+        # Caddy enables HTTP/3 by default and advertises it via Alt-Svc. Without
+        # UDP/443, browsers accept the advertisement, fail QUIC, then fall back to
+        # TCP -- a per-connection stall that shows up as elevated probe_duration_seconds
+        # rather than as a visible error.
         PORTS.CADDY_HTTPS
+
         # uTP: qBittorrent's default transport is UDP, not TCP. Opening only
         # the TCP port halves reachability in a way that looks like "slow
         # torrents" rather than a firewall problem.
@@ -331,6 +337,28 @@ in
       logRefusedConnections = false;
 
       extraInputRules = ''
+        # --- Administration ----------------------------------------------------
+
+        # sshd. Moved out of allowedTCPPorts so it is scoped like every other
+        # rule in this block, and for the same reason: an unscoped entry covers
+        # the globally routable IPv6 on this NIC as well as the LAN.
+        #
+        # MUST be present in the very first switch that moves it, otherwise the
+        # switch locks you out of the only remote administration path.
+        #
+        # Safe against lockout for one specific reason: big-boss reaches this
+        # host as `HostName ${IP.o700}` (systems/big-boss/deploy.nix), a literal
+        # IPv4 address, so the deploy connection cannot resolve to an AAAA and
+        # land outside this rule. If that HostName ever becomes a name, this
+        # rule needs an `ip6 saddr` twin in the SAME switch that changes it, or
+        # that deploy is the last one.
+        #
+        # This also settles the "move sshd to a high port to dodge scanners"
+        # question: there is no port to find now rather than a port that is
+        # merely unusual, and unlike a port change it closes the IPv6 exposure
+        # that was the actual problem.
+        ip saddr ${IP.lan} tcp dport ${toString PORTS.SSHD} accept comment "sshd LAN"
+
         # --- LAN-only services -------------------------------------------------
         # Source-CIDR scoped, IPv4 only, deliberately. This host has a single NIC:
         # LAN and WAN packets arrive on the same interface (enp4s0), so
@@ -409,6 +437,15 @@ in
     openssh = {
       enable = true;
       allowSFTP = false;
+
+      # Defaults to true, which puts cfg.ports straight into
+      # networking.firewall.allowedTCPPorts -- unscoped, both address families.
+      # That is exactly what moving sshd into extraInputRules was meant to
+      # stop, and with this left at its default the nftables rule below is
+      # decorative: the port stays open on the globally routable IPv6 and the
+      # source scoping never applies to anything.
+      openFirewall = false;
+
       settings = {
         PermitRootLogin = "no";
         PasswordAuthentication = false;
@@ -439,6 +476,18 @@ in
         # LogLevel = "VERBOSE" is set by the fail2ban module via mkDefault. It
         # also puts each accepted login's key fingerprint into the journal, which
         # is what makes "somebody logged in with an unrecognised key" answerable.
+
+        # Nothing here forwards a unix socket in either direction. This
+        # defaults to "yes" upstream and was the one forwarding primitive left
+        # at its permissive default after AllowAgentForwarding, PermitTunnel
+        # and GatewayPorts were each turned off above.
+        AllowStreamLocalForwarding = "no";
+
+        # PasswordAuthentication and KbdInteractiveAuthentication above disable
+        # the alternatives one at a time. This states the whitelist instead, so
+        # a future OpenSSH that grows a new authentication method does not
+        # silently grow it here too.
+        AuthenticationMethods = "publickey";
 
         # ssh -L is the only access path to anything bound to loopback. Netdata
         # is reachable through Caddy on the LAN, so this is no longer the sole

@@ -407,22 +407,6 @@
                 };
               };
             };
-
-            critical = lib.mkOption {
-              default = false;
-
-              description = ''
-                Does this service qualify as being 'critical'? Wires every unit
-                in `units` to the telegram notifier via OnFailure.
-
-                Deliberately a plain bool rather than `bool | listOf str`: the
-                list form made every consumer branch on the type, and could not
-                name extra units without repeating the service name. Extra
-                units go in `units` instead.
-              '';
-
-              type = lib.types.bool;
-            };
           };
         }
       )

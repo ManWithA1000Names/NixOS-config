@@ -169,7 +169,6 @@
 
   seta = {
     jellyfin = {
-      critical = true;
       requiresExSSD = true;
 
       # Confined like everything else, which is only safe because the default
@@ -199,7 +198,6 @@
     };
 
     kavita = {
-      critical = true;
       requiresExSSD = true;
 
       backup = {
@@ -275,8 +273,6 @@
     };
 
     paperless = {
-      critical = true;
-
       # Paperless has no unit called "paperless" -- the module ships
       # paperless-scheduler, paperless-task-queue, paperless-consumer and
       # paperless-web. The `units` default of [ name ] would therefore name a
@@ -378,7 +374,6 @@
     };
 
     mealie = {
-      critical = true;
       postgres = true;
 
       backup = {
@@ -413,8 +408,6 @@
     };
 
     seerr = {
-      critical = true;
-
       dashboard = {
         enable = true;
         name = "Seerr";
@@ -431,8 +424,6 @@
     };
 
     opencloud = {
-      critical = true;
-
       # The module ships a second unit. opencloud-init-config is a oneshot,
       # ordered before opencloud.service, that runs `opencloud init` to
       # generate /etc/opencloud/opencloud.yaml when it is absent -- that file
@@ -514,8 +505,6 @@
     };
 
     claude-code-api = {
-      critical = true;
-
       # networkConfinement left at its default of enabled, and it holds here
       # for the reason it holds for the Node services already on this host:
       # the CLI is a Node program, the module sets NODE_USE_ENV_PROXY=1
@@ -544,8 +533,6 @@
     };
 
     homepage-dashboard = {
-      critical = true;
-
       proxy = {
         enable = true;
         port = PORTS.DASHBOARD;

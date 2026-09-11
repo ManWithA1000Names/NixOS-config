@@ -93,6 +93,7 @@
 
           ./systems/o700/user.nix
           ./systems/o700/backup.nix
+          ./systems/o700/hardening.nix
           ./systems/o700/deploy.nix
           ./systems/o700/networking.nix
           ./systems/o700/monitoring.nix

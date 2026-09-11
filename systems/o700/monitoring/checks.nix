@@ -172,6 +172,18 @@ in
 {
   systemd.services.host-audit = {
     description = "Daily host integrity and backup audit";
+
+    # This unit does not crash, it *reports* by failing: the script exits with
+    # its finding count and the notifier attaches the journal lines echoed
+    # above, so this is the delivery path for "the offsite copy is 74h old",
+    # not merely an alarm that the audit broke.
+    #
+    # Which is why it is wired here rather than covered by netdata's
+    # systemd_service_unit_failed_state template like every other service. That
+    # alarm's whole payload is the unit name, so through it this would arrive
+    # as "host-audit failed" with the findings nowhere.
+    onFailure = [ "telegram-notify@%n.service" ];
+
     serviceConfig = {
       Type = "oneshot";
       ExecStart = lib.getExe audit-script;
@@ -198,6 +210,74 @@ in
       # actually fixes the problem.
       Nice = 19;
       IOSchedulingClass = "idle";
+    };
+  };
+
+  # ---------------------------------------------------------------------------
+  # vulnix
+  #
+  # The question nothing else here answers: is any package in the running
+  # closure known-vulnerable? This host reads CVEs the same way every NixOS
+  # host does -- by someone noticing a channel bump -- and the tinyproxy CVEs
+  # patched in nixpkgs earlier this month are exactly the class it misses.
+  #
+  # vulnix matches the whole store closure against the NVD feed, so it covers
+  # transitive dependencies nobody has a mental list of, not just the packages
+  # named in this repo.
+  #
+  # It reports the same way host-audit does -- non-zero exit with the findings
+  # on stdout -- so it reaches Telegram through the OnFailure wiring in
+  # notify.nix rather than carrying its own copy of the bot token. That makes
+  # it the fourth entry on the list of units still using that path; see the
+  # comment there about all four retiring once they post their own findings.
+  # ---------------------------------------------------------------------------
+
+  systemd.services.vulnix = {
+    description = "Scan the running system closure for known vulnerabilities";
+
+    # Reports by failing, exactly like host-audit above: vulnix exits non-zero
+    # when it finds something and the CVE list is on stdout. The netdata
+    # template would deliver the fact of a finding without the finding.
+    onFailure = [ "telegram-notify@%n.service" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+
+      # --system scans the closure of the *running* system rather than of this
+      # generation, which is the difference between "what did we last build"
+      # and "what is actually executing right now".
+      ExecStart = "${lib.getExe pkgs.vulnix} --system";
+
+      # The NVD feed is large and vulnix re-downloads it without a warm cache.
+      # It egresses over HTTPS through requests, which honours HTTPS_PROXY, so
+      # the fetch lands in the tinyproxy log like every other outbound call.
+      CacheDirectory = "vulnix";
+
+      # Reads nothing but /nix/store and its own cache, so it needs no
+      # privileges at all -- unlike host-audit above, which walks the root
+      # filesystem for SUID bits and therefore has to be root.
+      DynamicUser = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateDevices = true;
+      NoNewPrivileges = true;
+
+      Nice = 19;
+      IOSchedulingClass = "idle";
+    };
+  };
+
+  systemd.timers.vulnix = {
+    description = "Scan for known vulnerabilities weekly";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      # Weekly rather than daily: the feed is large, the closure only changes
+      # on a rebuild, and the answer moves on the order of days. A daily run
+      # would mostly re-download the NVD database to reprint yesterday's list.
+      OnCalendar = "weekly";
+      Persistent = true;
+      RandomizedDelaySec = "2h";
+      AccuracySec = "1h";
     };
   };
 

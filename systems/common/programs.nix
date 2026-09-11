@@ -1,13 +1,17 @@
 { pkgs, ... }: {
+  # Imported by both hosts, so anything added here lands on the WAN-facing
+  # server as well as on the workstation. gcc, gnumake and python3 used to be
+  # in this list and are now in systems/big-boss/programs.nix instead: nothing
+  # on o700 compiles, because closures are built on big-boss and pushed (see
+  # the justfile) and Nix builds use the store's toolchain rather than
+  # environment.systemPackages. On the server they were three toolchains handed
+  # to anything that gets a shell, for no function at all.
   environment.systemPackages = with pkgs; [
     # bare bone basics
-    gcc
     vim
     curl
     htop
     wget
-    gnumake
-    python3
     just
   ];
 
