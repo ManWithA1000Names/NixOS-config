@@ -90,46 +90,62 @@ let
       ];
     };
 
-    # Runs as root and drops to --user=dnsmasq itself, which is why it needs
-    # the SET* capabilities that a service started under User= does not:
-    # systemd is not doing the transition, dnsmasq is.
+    # The one unit here whose capability set is dictated by the daemon rather
+    # than inferred. dnsmasq calls capget() at startup, compares the permitted
+    # set against what its configuration needs, and calls die() on a shortfall
+    # -- so a bounding set that is one capability short is not a subtle
+    # degradation, it is "FAILED to start up" on the LAN's only resolver.
     #
-    # AF_NETLINK is not optional. dnsmasq enumerates interfaces and watches
-    # for address changes over a netlink socket, and without it the daemon
+    # Taken from dnsmasq 2.93 src/dnsmasq.c rather than from reasoning about
+    # what a DNS server "should" need, after two rounds of getting that wrong:
+    #
+    #   NET_RAW             Required unconditionally because this unit runs
+    #                       with --enable-dbus: the HAVE_DBUS branch at :526
+    #                       sets need_cap_net_raw = 1 whenever OPT_DBUS is on.
+    #                       Nothing to do with DHCP, which is what the upstream
+    #                       comment at :505 talks about and what misled the
+    #                       first attempt here. Also needed by any `server=`
+    #                       line bound to an interface, which uses
+    #                       SO_BINDTODEVICE.
+    #   NET_BIND_SERVICE    Port 53, and set by the same dbus branch.
+    #   NET_ADMIN           ARP injection on the DHCP paths (:221, :327, :337).
+    #                       Not used by this DNS-only configuration; kept
+    #                       because the daemon's own checks are configuration
+    #                       dependent and this is not the unit to be clever on.
+    #   SETUID, SETGID      It drops to --user=dnsmasq itself. systemd is not
+    #                       doing the transition, so these are not implied by a
+    #                       User= line the way they are everywhere else here.
+    #   CHOWN               Read at :559 into have_cap_chown, and used for the
+    #                       lease file after privileges are dropped. Also what
+    #                       the pre-start's `chown -R dnsmasq` needs.
+    #   DAC_OVERRIDE        Not for the daemon: for the ExecStartPre, which runs
+    #                       as root and touches /var/lib/dnsmasq, a directory
+    #                       owned by dnsmasq from the previous run. Root is
+    #                       "other" against 0755, so this is the only thing that
+    #                       permits the write. Its absence produced
+    #                       "touch: cannot touch ...: Permission denied" and was
+    #                       reproduced exactly as a namespace root with the
+    #                       capability dropped.
+    #   SETPCAP             Kept rather than justified. Reducing one's own
+    #                       capabilities through capset() does not require it on
+    #                       a current kernel, so this is probably removable --
+    #                       but "probably" has now cost two outages here, and
+    #                       verifying it is worth more than the 0.0 of score it
+    #                       would return.
+    #
+    # AF_NETLINK is separate from all of that: dnsmasq enumerates interfaces and
+    # watches for address changes over a netlink socket. Without it the daemon
     # starts and then cannot see the interface it is meant to answer on.
-    # This host is the LAN's only resolver and big-boss depends on it, so
-    # the failure would take name resolution down for the network from
-    # which it would have to be fixed.
     dnsmasq = infraDefaults // {
       capabilities = [
         "CAP_NET_BIND_SERVICE"
+        "CAP_NET_RAW"
+        "CAP_NET_ADMIN"
         "CAP_SETUID"
         "CAP_SETGID"
         "CAP_SETPCAP"
-        "CAP_NET_ADMIN"
-
-        # These two are for the ExecStartPre, not the daemon, and leaving
-        # them out is what broke DNS on 2026-09-11 with
-        #   touch: cannot touch '/var/lib/dnsmasq/dnsmasq.leases':
-        #   Permission denied
-        #
-        # The module's pre-start runs as root -- this unit has no User=,
-        # because dnsmasq drops to --user=dnsmasq itself -- and does
-        # `mkdir`, `touch` and `chown -R dnsmasq` on /var/lib/dnsmasq. That
-        # directory is owned by dnsmasq from the previous run, so root is
-        # "other" against a 0755 directory and its write is permitted only
-        # by CAP_DAC_OVERRIDE. Reproduced exactly, down to the error
-        # string, by running the same touch as a namespace root with this
-        # capability dropped.
-        #
-        # CAP_CHOWN covers the `chown -R`, which is a no-op in steady
-        # state (the uid already matches, and the kernel skips the check
-        # when ownership does not actually change) but is load-bearing on
-        # the path that matters most: a fresh /var/lib, where root creates
-        # the file and the ownership genuinely changes. That is the
-        # restore path.
-        "CAP_DAC_OVERRIDE"
         "CAP_CHOWN"
+        "CAP_DAC_OVERRIDE"
       ];
       addressFamilies = infraDefaults.addressFamilies ++ [ "AF_NETLINK" ];
     };
